@@ -8,9 +8,11 @@
 
 ## Phase 2: Golang 後端開發 (Orchestrator)
 
+- [ ] **JWT Auth Middleware**: 實作 HS256 JWT Bearer Token 驗證中介層。
 - [ ] **API Provider**: 封裝 Agora (Token/Media Push), GCP (Live Stream API), YouTube (Stream Key)。
-- [ ] **Live Service**: 實作開播/關播邏輯調度，管理流媒體生命週期。
-- [ ] **Endpoints**: 完成 `POST /v1/live/start` 與 `POST /v1/live/stop`。
+- [ ] **Agora Webhook**: 實作 `POST /v1/webhook/agora`，接收 Agora NCS 事件並觸發 Media Push。
+- [ ] **Live Service**: 實作 Prepare/Start/Stop 邏輯調度，管理 Session 狀態機與流媒體生命週期。
+- [ ] **Endpoints**: 完成 `POST /v1/live/prepare`、`POST /v1/live/start`、`POST /v1/live/stop`、`GET /v1/live/status`。
 
 ## Phase 3: 前端開發與驗證
 
@@ -24,7 +26,7 @@
 - [ ] **Native Player**: iOS/Android 串接 GCP HLS 播放器。
 - [ ] **Mobile Streamer**: 實作行動端 Agora 開播功能。
 - [ ] **Cross-Platform SDKs**:
-	- [ ] Web Live SDK 封裝
-	- [ ] Android Live SDK 封裝
-	- [ ] iOS Live SDK 封裝
+  - [ ] Web Live SDK 封裝
+  - [ ] Android Live SDK 封裝
+  - [ ] iOS Live SDK 封裝
 - [ ] **Media CDN**: 測試將 Cloud CDN 替換為 Media CDN 的延遲表現。
