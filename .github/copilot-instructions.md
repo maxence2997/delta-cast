@@ -51,7 +51,7 @@ docker-compose up
 
 1. **Read before write** — always read `doc/spec.md`, `doc/instruction.md`, and the target file fully before editing.
 2. **Minimal changes** — one concern per edit; no drive-by refactors.
-3. **No hardcoded secrets** — all API keys/secrets via environment variables (see `env.example`).
+3. **No hardcoded secrets** — all API keys/secrets via environment variables (see `server/.env.example`).
 4. **Resource cleanup is critical** — GCP resources are billed per-time. The stop flow must attempt every cleanup step even if earlier steps fail (log error, continue).
 5. **Idempotent webhook handling** — Agora NCS may send duplicate events; guard with session state checks.
 6. **Single active session** — POC supports one session at a time. Duplicate `start` returns existing session, not a new one.

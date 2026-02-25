@@ -4,32 +4,42 @@
 
 ```
 delta-cast/
-├── doc/                 # 存放 spec.md, instruction.md, task-tracking.md
-├── server/              # Golang (Orchestrator) 專案
-│   ├── cmd/             # 進入點 (main.go)
-│   ├── internal/        # 內部模組（不對外暴露）
-│   │   ├── handler/     # HTTP handler（路由處理）
-│   │   ├── middleware/   # JWT 驗證、logging 等中介層
-│   │   ├── service/     # 業務邏輯層（LiveService, Session 管理）
-│   │   ├── provider/    # 第三方 API 封裝（Agora, GCP, YouTube）
-│   │   ├── model/       # 資料結構定義
-│   │   └── config/      # 環境變數載入與配置
-│   └── go.mod
-├── web/                 # 前端 Web 專案 (Next.js / React)
+├── doc/                        # 存放 spec.md, instruction.md, task-tracking.md
+├── server/                     # Golang (Orchestrator) 專案
+│   ├── cmd/                    # 進入點 (main.go)
+│   ├── internal/               # 內部模組（不對外暴露）
+│   │   ├── handler/            # HTTP handler（路由處理）
+│   │   ├── middleware/         # JWT 驗證、logging 等中介層
+│   │   ├── service/            # 業務邏輯層（LiveService, Session 管理）
+│   │   ├── provider/           # 第三方 API 封裝（Agora, GCP, YouTube）
+│   │   ├── model/              # 資料結構定義
+│   │   └── config/             # 環境變數載入與配置
+│   ├── go.mod
+│   ├── go.sum
+│   ├── Dockerfile
+│   └── .env.example            # 環境變數範例（不包含敏感資訊）
+├── web/                        # 前端 Web 專案 (Next.js / React)
 │   ├── src/
-│   └── package.json
-├── mobile/              # 未來的 Mobile SDK 或 Demo (Flutter/RN/Native)
+│   │   ├── app/                # Next.js App Router 頁面
+│   │   ├── components/         # 共用 UI 元件
+│   │   └── lib/                # 工具函式與 hooks
+│   ├── public/                 # 靜態資源（圖片、字型等）
+│   ├── .env.example            # 環境變數範例
+│   ├── package.json            # 依賴管理
+│   ├── README.md
+│   └── ...                     # 其他前端相關配置文件
+├── mobile/                     # 未來的 Mobile SDK 或 Demo (Flutter/RN/Native)
 │   ├── ios/
 │   └── android/
-├── shared/              # 存放 Proto 定義或統一的轉碼參數 JSON（若有）
-├── .github/             # GitHub Actions 自動化腳本
+├── shared/                     # 存放 Proto 定義或統一的轉碼參數 JSON（若有）
+├── .github/                    # GitHub Actions 自動化腳本
 │   └── workflows/
-│       ├── deploy-server.yml
-│       ├── deploy-web.yml
-│       ├── deploy-ios.yml
-│       └── deploy-android.yml
-├── env.example          # 環境變數範例文件，列舉所有需要的 API 金鑰與配置項
-└── docker-compose.yml   # 本地一次性啟動所有服務進行整合測試
+│       ├── deploy-server.yml   # 後端部署腳本
+│       ├── deploy-web.yml      # 前端部署腳本
+│       ├── deploy-ios.yml      # iOS 部署腳本（未來）
+│       └── deploy-android.yml  # Android 部署腳本（未來）  
+├── docker-compose.yml          # 本地一次性啟動所有服務進行整合測試
+└── Makefile                    # 常用命令（如 `make run-server`, `make run-web`, `make test` 等）
 ```
 
 ---
@@ -105,7 +115,7 @@ delta-cast/
 
 ### 環境變數設定
 
-1. 複製 `env.example` 到專案根目錄並重新命名為 `.env`。
+1. 複製 `server/.env.example` 到 `server/.env`。
 2. 填入所有必要的 API 金鑰與配置。
 3. **禁止**將 `.env` 加入版本控制（已在 `.gitignore` 中排除）。
 
