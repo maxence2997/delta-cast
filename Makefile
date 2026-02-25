@@ -2,7 +2,7 @@
 # DeltaCast — Developer Makefile
 # ========================================
 
-.PHONY: help build run test lint fmt tidy vet docker-up docker-down docker-build env clean clean-all
+.PHONY: help build run test lint fmt tidy vet web-dev web-build web-lint docker-up docker-down docker-build env clean clean-all
 
 # Default target
 help: ## Show available commands
@@ -42,6 +42,19 @@ tidy: ## Tidy Go module dependencies
 vet: lint ## Alias for lint
 
 # ----------------------------------------
+# Frontend (Next.js)
+# ----------------------------------------
+
+web-dev: ## Start Next.js dev server
+	cd web && npm run dev
+
+web-build: ## Build Next.js for production
+	cd web && npm run build
+
+web-lint: ## Lint frontend code
+	cd web && npm run lint
+
+# ----------------------------------------
 # Docker
 # ----------------------------------------
 
@@ -66,7 +79,9 @@ env: ## Create .env from env.example (will not overwrite)
 
 clean: ## Remove build artifacts
 	rm -rf server/bin server/coverage.out server/coverage.html
+	rm -rf web/.next web/out
 
 clean-all: ## Remove build artifacts + Go caches
 	rm -rf server/bin server/coverage.out server/coverage.html
+	rm -rf web/.next web/out
 	cd server && go clean -cache -testcache -modcache

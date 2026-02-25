@@ -16,8 +16,8 @@
 
 ## Phase 3: 前端開發與驗證
 
-- [ ] **Web Streamer**: 實作 Agora Web SDK 推流介面。
-- [ ] **Web Audience**: 實作 Video.js 播放器，串接 Cloud CDN HLS URL。
+- [x] **Web Streamer**: 實作 Agora Web SDK 推流介面。
+- [x] **Web Audience**: 實作 Video.js 播放器，串接 Cloud CDN HLS URL。
 - [ ] **Integration Test**: 驗證一鍵開播後，YouTube 與 Web 播放器同步顯示畫面。
 
 ## Phase 4: Nice to Have (擴充項目)
