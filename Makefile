@@ -2,7 +2,7 @@
 # DeltaCast — Developer Makefile
 # ========================================
 
-.PHONY: help build run test lint fmt tidy vet web-dev web-build web-lint docker-up docker-down docker-build env clean clean-all
+.PHONY: help build run test lint fmt tidy vet web-dev web-build web-lint docker-up docker-down docker-build clean clean-all
 
 # Default target
 help: ## Show available commands
@@ -73,9 +73,6 @@ docker-logs: ## Tail logs from all services
 # ----------------------------------------
 # Setup & Utilities
 # ----------------------------------------
-
-env: ## Create .env from env.example (will not overwrite)
-	@if [ -f .env ]; then echo ".env already exists, skipping."; else cp env.example .env && echo "Created .env — fill in your secrets."; fi
 
 clean: ## Remove build artifacts
 	rm -rf server/bin server/coverage.out server/coverage.html
