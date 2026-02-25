@@ -250,3 +250,35 @@ hs_err_pid*
 !/gradle/wrapper/gradle-wrapper.jar
 
 # End of https://www.toptal.com/developers/gitignore/api/visualstudiocode,xcode,androidstudio,intellij+all
+
+### DeltaCast Project ###
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Go
+vendor/
+tmp/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+coverage.out
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+dist/
+.pnpm-store/
+
+# Docker
+.docker/
+
+# OS
+.DS_Store
+Thumbs.db

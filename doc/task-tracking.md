@@ -8,11 +8,11 @@
 
 ## Phase 2: Golang 後端開發 (Orchestrator)
 
-- [ ] **JWT Auth Middleware**: 實作 HS256 JWT Bearer Token 驗證中介層。
-- [ ] **API Provider**: 封裝 Agora (Token/Media Push), GCP (Live Stream API), YouTube (Stream Key)。
-- [ ] **Agora Webhook**: 實作 `POST /v1/webhook/agora`，接收 Agora NCS 事件並觸發 Media Push。
-- [ ] **Live Service**: 實作 Prepare/Start/Stop 邏輯調度，管理 Session 狀態機與流媒體生命週期。
-- [ ] **Endpoints**: 完成 `POST /v1/live/prepare`、`POST /v1/live/start`、`POST /v1/live/stop`、`GET /v1/live/status`。
+- [x] **JWT Auth Middleware**: 實作 HS256 JWT Bearer Token 驗證中介層。
+- [x] **API Provider**: 封裝 Agora (Token/Media Push), GCP (Live Stream API), YouTube (Stream Key)。
+- [x] **Agora Webhook**: 實作 `POST /v1/webhook/agora`，接收 Agora NCS 事件並觸發 Media Push。
+- [x] **Live Service**: 實作 Prepare/Start/Stop 邏輯調度，管理 Session 狀態機與流媒體生命週期。
+- [x] **Endpoints**: 完成 `POST /v1/live/prepare`、`POST /v1/live/start`、`POST /v1/live/stop`、`GET /v1/live/status`。
 
 ## Phase 3: 前端開發與驗證
 
