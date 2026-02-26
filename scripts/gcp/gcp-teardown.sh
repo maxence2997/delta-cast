@@ -15,10 +15,25 @@
 
 set -euo pipefail
 
+# ── 載入環境變數 ──────────────────────────────────────────────────────────────
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck disable=SC1091
+[ -f "${SCRIPT_DIR}/../.env" ] && source "${SCRIPT_DIR}/../.env"
+
+# ── 必填變數檢查 ──────────────────────────────────────────────────────────────
+MISSING=()
+[ -z "${GCP_PROJECT_ID:-}" ] && MISSING+=("GCP_PROJECT_ID")
+[ -z "${GCP_BUCKET_NAME:-}" ] && MISSING+=("GCP_BUCKET_NAME")
+if [ ${#MISSING[@]} -gt 0 ]; then
+  echo "Error: missing required env vars: ${MISSING[*]}" >&2
+  echo "Copy scripts/.env.example to scripts/.env and fill in values." >&2
+  exit 1
+fi
+
 # ── 設定 ──────────────────────────────────────────────────────────────────────
-PROJECT_ID="${GCP_PROJECT_ID:-omega-pivot-488513-k6}"
+PROJECT_ID="${GCP_PROJECT_ID}"
 REGION="${GCP_REGION:-asia-east1}"
-BUCKET_NAME="${GCP_BUCKET_NAME:-deltacast-live-output}"
+BUCKET_NAME="${GCP_BUCKET_NAME}"
 SA_NAME="deltacast-server"
 SA_EMAIL="${SA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
 

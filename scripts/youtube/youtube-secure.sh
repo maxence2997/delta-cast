@@ -34,7 +34,19 @@
 
 set -euo pipefail
 
-PROJECT_ID="${GCP_PROJECT_ID:-omega-pivot-488513-k6}"
+# ── 載入環境變數 ──────────────────────────────────────────────────────────────
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck disable=SC1091
+[ -f "${SCRIPT_DIR}/../.env" ] && source "${SCRIPT_DIR}/../.env"
+
+# ── 必填變數檢查 ──────────────────────────────────────────────────────────────
+if [ -z "${GCP_PROJECT_ID:-}" ]; then
+  echo "Error: GCP_PROJECT_ID is not set." >&2
+  echo "Copy scripts/.env.example to scripts/.env and fill in values." >&2
+  exit 1
+fi
+
+PROJECT_ID="${GCP_PROJECT_ID}"
 YOUTUBE_API="https://www.googleapis.com/youtube/v3"
 
 RED='\033[0;31m'

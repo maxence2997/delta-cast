@@ -40,7 +40,7 @@ gcloud services list --enabled | grep livestream
 
 ```bash
 export GCP_REGION=asia-east1
-export BUCKET_NAME=deltacast-live-output
+export BUCKET_NAME=<YOUR_BUCKET_NAME>
 
 gsutil mb -l $GCP_REGION -p YOUR_PROJECT_ID gs://$BUCKET_NAME
 
@@ -126,9 +126,9 @@ export GOOGLE_APPLICATION_CREDENTIALS=~/deltacast-sa-key.json
 
 | 環境變數                         | 值                        | 備註                         |
 | -------------------------------- | ------------------------- | ---------------------------- |
-| `GCP_PROJECT_ID`                 | `omega-pivot-488513-k6`   |                              |
+| `GCP_PROJECT_ID`                 | `<YOUR_PROJECT_ID>`       |                              |
 | `GCP_REGION`                     | `asia-east1`              |                              |
-| `GCP_BUCKET_NAME`                | `deltacast-live-output`   |                              |
+| `GCP_BUCKET_NAME`                | `<YOUR_BUCKET_NAME>`      |                              |
 | `GCP_CDN_DOMAIN`                 | `<YOUR_CDN_DOMAIN>`       | A Record 已指向 Cloud CDN IP |
 | `GOOGLE_APPLICATION_CREDENTIALS` | `~/deltacast-sa-key.json` | 系統環境變數，不進 .env 檔   |
 

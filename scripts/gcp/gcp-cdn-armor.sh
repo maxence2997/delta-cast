@@ -32,7 +32,19 @@
 
 set -euo pipefail
 
-PROJECT_ID="${GCP_PROJECT_ID:-omega-pivot-488513-k6}"
+# ── 載入環境變數 ──────────────────────────────────────────────────────────────
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck disable=SC1091
+[ -f "${SCRIPT_DIR}/../.env" ] && source "${SCRIPT_DIR}/../.env"
+
+# ── 必填變數檢查 ──────────────────────────────────────────────────────────────
+if [ -z "${GCP_PROJECT_ID:-}" ]; then
+  echo "Error: GCP_PROJECT_ID is not set." >&2
+  echo "Copy scripts/.env.example to scripts/.env and fill in values." >&2
+  exit 1
+fi
+
+PROJECT_ID="${GCP_PROJECT_ID}"
 BACKEND_BUCKET="deltacast-backend"
 ARMOR_POLICY="deltacast-armor"
 # 逗號分隔的白名單 IP（支援 CIDR），例如 "1.2.3.4/32,5.6.7.0/24"
