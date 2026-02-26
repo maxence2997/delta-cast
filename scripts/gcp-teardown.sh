@@ -1,0 +1,195 @@
+#!/usr/bin/env bash
+# =============================================================================
+# GCP Teardown Script — DeltaCast
+#
+# 清除所有為 DeltaCast 建立的靜態 GCP 資源。
+# 執行前確認 PROJECT_ID / REGION / BUCKET_NAME 與實際設定一致。
+#
+# 執行方式：
+#   chmod +x scripts/gcp-teardown.sh
+#   ./scripts/gcp-teardown.sh
+#
+# 若要跳過確認提示（CI 環境）：
+#   SKIP_CONFIRM=1 ./scripts/gcp-teardown.sh
+# =============================================================================
+
+set -euo pipefail
+
+# ── 設定 ──────────────────────────────────────────────────────────────────────
+PROJECT_ID="${GCP_PROJECT_ID:-omega-pivot-488513-k6}"
+REGION="${GCP_REGION:-asia-east1}"
+BUCKET_NAME="${GCP_BUCKET_NAME:-deltacast-live-output}"
+SA_NAME="deltacast-server"
+SA_EMAIL="${SA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
+
+# Cloud CDN 相關資源名稱（與 phase1-setup.md 一致）
+FORWARDING_RULE="deltacast-http-rule"
+HTTP_PROXY="deltacast-http-proxy"
+URL_MAP="deltacast-url-map"
+BACKEND_BUCKET="deltacast-backend"
+ARMOR_POLICY="deltacast-armor"
+
+# ── 顏色輸出 ──────────────────────────────────────────────────────────────────
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+GREEN='\033[0;32m'
+CYAN='\033[0;36m'
+NC='\033[0m'
+
+info()    { echo -e "${CYAN}[INFO]${NC}  $*"; }
+warn()    { echo -e "${YELLOW}[WARN]${NC}  $*"; }
+success() { echo -e "${GREEN}[OK]${NC}    $*"; }
+skip()    { echo -e "${YELLOW}[SKIP]${NC}  $*"; }
+err()     { echo -e "${RED}[ERR]${NC}   $*"; }
+
+# ── 確認提示 ──────────────────────────────────────────────────────────────────
+echo ""
+echo -e "${RED}=====================================================${NC}"
+echo -e "${RED}  ⚠️  GCP TEARDOWN — 此操作不可復原  ⚠️${NC}"
+echo -e "${RED}=====================================================${NC}"
+echo ""
+echo "  Project : $PROJECT_ID"
+echo "  Region  : $REGION"
+echo "  Bucket  : $BUCKET_NAME"
+echo ""
+
+if [[ "${SKIP_CONFIRM:-0}" != "1" ]]; then
+  read -r -p "確定要清除所有 DeltaCast GCP 資源嗎？輸入 'yes' 繼續：" confirm
+  if [[ "$confirm" != "yes" ]]; then
+    echo "已取消。"
+    exit 0
+  fi
+fi
+
+gcloud config set project "$PROJECT_ID" --quiet
+
+# ── 輔助函式：執行指令，失敗不中斷腳本 ──────────────────────────────────────
+run() {
+  if eval "$@" 2>/dev/null; then
+    success "$*"
+  else
+    skip "已不存在或跳過：$*"
+  fi
+}
+
+echo ""
+info "════ Step 1：清除 Live Stream API 執行時資源 ════"
+# Live Stream 的 Channel/Input/Event 是執行時動態建立的，需先清除
+
+# 停止所有 Channel 並刪除 Event
+info "列出所有 Channel..."
+CHANNELS=$(gcloud beta livestream channels list \
+  --location="$REGION" \
+  --format="value(name)" 2>/dev/null || true)
+
+if [[ -n "$CHANNELS" ]]; then
+  while IFS= read -r channel; do
+    CHANNEL_ID=$(basename "$channel")
+    warn "停止 Channel: $CHANNEL_ID"
+    gcloud beta livestream channels stop "$CHANNEL_ID" \
+      --location="$REGION" --quiet 2>/dev/null || true
+    sleep 5
+    info "刪除 Channel Events: $CHANNEL_ID"
+    EVENTS=$(gcloud beta livestream channels events list \
+      --channel="$CHANNEL_ID" \
+      --location="$REGION" \
+      --format="value(name)" 2>/dev/null || true)
+    while IFS= read -r event; do
+      [[ -z "$event" ]] && continue
+      EVENT_ID=$(basename "$event")
+      run gcloud beta livestream channels events delete "$EVENT_ID" \
+        --channel="$CHANNEL_ID" --location="$REGION" --quiet
+    done <<< "$EVENTS"
+    run gcloud beta livestream channels delete "$CHANNEL_ID" \
+      --location="$REGION" --quiet
+  done <<< "$CHANNELS"
+else
+  skip "無 Channel 資源"
+fi
+
+info "列出所有 Input..."
+INPUTS=$(gcloud beta livestream inputs list \
+  --location="$REGION" \
+  --format="value(name)" 2>/dev/null || true)
+
+if [[ -n "$INPUTS" ]]; then
+  while IFS= read -r input; do
+    [[ -z "$input" ]] && continue
+    INPUT_ID=$(basename "$input")
+    run gcloud beta livestream inputs delete "$INPUT_ID" \
+      --location="$REGION" --quiet
+  done <<< "$INPUTS"
+else
+  skip "無 Input 資源"
+fi
+
+echo ""
+info "════ Step 2：清除 Cloud Armor 防護規則 ════"
+if gcloud compute security-policies describe "$ARMOR_POLICY" --quiet 2>/dev/null; then
+  # 先從 Backend Bucket 解除關聯
+  run gcloud compute backend-buckets update "$BACKEND_BUCKET" \
+    --no-security-policy --quiet
+  run gcloud compute security-policies delete "$ARMOR_POLICY" --quiet
+else
+  skip "Cloud Armor Policy $ARMOR_POLICY 不存在"
+fi
+
+echo ""
+info "════ Step 3：清除 Cloud CDN / Load Balancer 資源 ════"
+# 必須依序刪除：Forwarding Rule → HTTP Proxy → URL Map → Backend Bucket
+run gcloud compute forwarding-rules delete "$FORWARDING_RULE" \
+  --global --quiet
+run gcloud compute target-http-proxies delete "$HTTP_PROXY" --quiet
+run gcloud compute url-maps delete "$URL_MAP" --quiet
+run gcloud compute backend-buckets delete "$BACKEND_BUCKET" --quiet
+
+echo ""
+info "════ Step 4：清除 GCS Bucket ════"
+if gsutil ls "gs://$BUCKET_NAME" 2>/dev/null; then
+  warn "清空 Bucket 內容：gs://$BUCKET_NAME"
+  gsutil -m rm -rf "gs://$BUCKET_NAME/**" 2>/dev/null || true
+  run gsutil rb "gs://$BUCKET_NAME"
+else
+  skip "Bucket gs://$BUCKET_NAME 不存在"
+fi
+
+echo ""
+info "════ Step 5：清除 Service Account ════"
+# 列出所有 SA 金鑰並刪除
+info "刪除 Service Account 金鑰..."
+SA_KEYS=$(gcloud iam service-accounts keys list \
+  --iam-account="$SA_EMAIL" \
+  --managed-by=user \
+  --format="value(name)" 2>/dev/null || true)
+
+if [[ -n "$SA_KEYS" ]]; then
+  while IFS= read -r key; do
+    [[ -z "$key" ]] && continue
+    KEY_ID=$(basename "$key")
+    run gcloud iam service-accounts keys delete "$KEY_ID" \
+      --iam-account="$SA_EMAIL" --quiet
+  done <<< "$SA_KEYS"
+fi
+
+# 移除 IAM Bindings
+info "移除 IAM policy bindings..."
+for role in "roles/livestream.editor" "roles/storage.objectAdmin"; do
+  run gcloud projects remove-iam-policy-binding "$PROJECT_ID" \
+    --member="serviceAccount:$SA_EMAIL" \
+    --role="$role" \
+    --quiet
+done
+
+run gcloud iam service-accounts delete "$SA_EMAIL" --quiet
+
+echo ""
+echo -e "${GREEN}=================================================${NC}"
+echo -e "${GREEN}  ✅  GCP Teardown 完成${NC}"
+echo -e "${GREEN}=================================================${NC}"
+echo ""
+info "已保留（手動管理）："
+echo "  - Enabled APIs（livestream.googleapis.com 等）"
+echo "  - OAuth 2.0 Credentials（YouTube）"
+echo "  - 本機金鑰檔：~/deltacast-sa-key.json（請手動刪除）"
+echo ""
+warn "若要重新部署，執行 phase1-setup.md 中的 GCP 設定步驟。"
