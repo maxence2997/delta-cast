@@ -2,7 +2,7 @@
 # DeltaCast — Developer Makefile
 # ========================================
 
-.PHONY: help build run test lint fmt tidy vet web-dev web-build web-lint docker-up docker-down docker-build clean clean-all gcp-open gcp-open-public gcp-close gcp-status
+.PHONY: help build run test lint fmt tidy vet web-dev web-build web-lint docker-up docker-down docker-build clean clean-all gcp-open gcp-open-public gcp-close gcp-status yt-status yt-open yt-close res-open res-open-public res-close res-status
 
 # Default target
 help: ## Show available commands
@@ -114,3 +114,50 @@ gcp-close: ## Close CDN after testing: deny-all + lock GCS bucket
 	@echo "\n\033[36m── Step 2/2: GCS → lock direct access ──\033[0m"
 	@./scripts/gcp-storage-secure.sh --mode lock
 	@echo "\n\033[32m✅  Resources closed. Run 'make gcp-status' to verify.\033[0m\n"
+
+# ----------------------------------------
+# YouTube Resource Control
+# ----------------------------------------
+
+yt-status: ## Show YouTube API status + all Broadcasts privacy state
+	@chmod +x scripts/youtube-secure.sh
+	@./scripts/youtube-secure.sh --mode status
+
+yt-open: ## Unlock YouTube for testing: set Broadcasts to unlisted
+	@chmod +x scripts/youtube-secure.sh
+	@./scripts/youtube-secure.sh --mode unlock
+
+yt-close: ## Lock YouTube after testing: set Broadcasts to private
+	@chmod +x scripts/youtube-secure.sh
+	@./scripts/youtube-secure.sh --mode lock
+
+# ----------------------------------------
+# Test Session Control (GCP + YouTube)
+# ----------------------------------------
+
+res-open: ## Open all resources for testing: allowlist IP + unlock GCS + unlock YT
+	@echo "\n\033[36m════ res-open: GCP ════\033[0m"
+	@$(MAKE) gcp-open
+	@echo "\n\033[36m════ res-open: YouTube ════\033[0m"
+	@$(MAKE) yt-open
+	@echo "\n\033[32m✅  All resources open. Run 'make res-status' to verify.\033[0m\n"
+
+res-open-public: ## Open all resources to everyone: CDN allow-all + unlock GCS + unlock YT
+	@echo "\n\033[36m════ res-open-public: GCP ════\033[0m"
+	@$(MAKE) gcp-open-public
+	@echo "\n\033[36m════ res-open-public: YouTube ════\033[0m"
+	@$(MAKE) yt-open
+	@echo "\n\033[32m✅  All resources fully open. Run 'make res-status' to verify.\033[0m\n"
+
+res-close: ## Close all resources after testing: deny CDN + lock GCS + lock YT
+	@echo "\n\033[36m════ res-close: GCP ════\033[0m"
+	@$(MAKE) gcp-close
+	@echo "\n\033[36m════ res-close: YouTube ════\033[0m"
+	@$(MAKE) yt-close
+	@echo "\n\033[32m✅  All resources closed. Run 'make res-status' to verify.\033[0m\n"
+
+res-status: ## Show status of all resources (GCP + YouTube)
+	@echo "\n\033[36m════ GCP Status ════\033[0m"
+	@$(MAKE) gcp-status
+	@echo "\n\033[36m════ YouTube Status ════\033[0m"
+	@$(MAKE) yt-status
