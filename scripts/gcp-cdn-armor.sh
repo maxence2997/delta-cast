@@ -105,6 +105,15 @@ if [[ "$MODE_VALUE" == "allowlist" ]]; then
 
 elif [[ "$MODE_VALUE" == "deny-all" ]]; then
   # ── 模式 C：完全封鎖 ──────────────────────────────────────────────────────
+  CURRENT_DEFAULT=$(gcloud compute security-policies rules describe 2147483647 \
+    --security-policy="$ARMOR_POLICY" --format="value(action)" 2>/dev/null || echo "unknown")
+  RULE_1000=$(gcloud compute security-policies rules describe 1000 \
+    --security-policy="$ARMOR_POLICY" --quiet &>/dev/null && echo true || echo false)
+  if [[ "$CURRENT_DEFAULT" == "deny(403)" && "$RULE_1000" == "false" ]]; then
+    info "已是 deny-all 狀態。無需變更。"
+    exit 0
+  fi
+
   info "設定完全封鎖：所有請求一律 403"
 
   # 刪除 priority 1000（若存在）避免有殘留 allow 規則
@@ -120,6 +129,15 @@ elif [[ "$MODE_VALUE" == "deny-all" ]]; then
 
 elif [[ "$MODE_VALUE" == "allow-all" ]]; then
   # ── 模式 D：完全開放（保留 policy，方便快速切回 deny-all）───────────────
+  CURRENT_DEFAULT=$(gcloud compute security-policies rules describe 2147483647 \
+    --security-policy="$ARMOR_POLICY" --format="value(action)" 2>/dev/null || echo "unknown")
+  RULE_1000=$(gcloud compute security-policies rules describe 1000 \
+    --security-policy="$ARMOR_POLICY" --quiet &>/dev/null && echo true || echo false)
+  if [[ "$CURRENT_DEFAULT" == "allow" && "$RULE_1000" == "false" ]]; then
+    info "已是 allow-all 狀態。無需變更。"
+    exit 0
+  fi
+
   info "設定完全開放：所有請求一律允許"
 
   # 刪除 priority 1000（若存在）

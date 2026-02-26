@@ -75,6 +75,15 @@ if [[ "$MODE_VALUE" == "lock" ]]; then
   echo "  CDN SA       : $CDN_SA"
   echo ""
 
+  # 狀態檢查：若 allUsers 已不存在且 CDN SA 已有權限 → 已是鎖定狀態
+  IAM_JSON=$(gsutil iam get "gs://$BUCKET_NAME" 2>/dev/null)
+  ALREADY_NO_PUBLIC=$(echo "$IAM_JSON" | grep -q "allUsers" && echo false || echo true)
+  ALREADY_CDN_SA=$(echo "$IAM_JSON" | grep -q "$CDN_SA" && echo true || echo false)
+  if [[ "$ALREADY_NO_PUBLIC" == "true" && "$ALREADY_CDN_SA" == "true" ]]; then
+    info "已是鎖定狀態（allUsers 不存在，CDN SA 已授權）。無需變更。"
+    exit 0
+  fi
+
   # Step 1：建立 CDN Signed URL Key 以觸發 CDN fill SA 的自動創建
   info "Step 1：初始化 CDN Signed URL Key（觸發 CDN fill SA 建立）..."
   if gcloud compute backend-buckets describe "$BACKEND_BUCKET" \
@@ -126,6 +135,12 @@ elif [[ "$MODE_VALUE" == "unlock" ]]; then
   echo ""
   warn "⚠️  恢復 allUsers 公開讀取，GCS 直接 URL 將可存取（暫時偵錯用）。"
   echo ""
+
+  # 狀態檢查：若 allUsers 已存在 → 已是解鎖狀態
+  if gsutil iam get "gs://$BUCKET_NAME" 2>/dev/null | grep -q "allUsers"; then
+    info "已是解鎖狀態（allUsers:objectViewer 已存在）。無需變更。"
+    exit 0
+  fi
 
   info "恢復 allUsers:objectViewer..."
   gsutil iam ch allUsers:objectViewer "gs://$BUCKET_NAME"
