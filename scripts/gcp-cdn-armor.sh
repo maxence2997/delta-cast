@@ -10,17 +10,24 @@
 # 使用方式：
 #   chmod +x scripts/gcp-cdn-armor.sh
 #
-#   # 模式 A：全球公開 + 速率限制（推薦測試期使用）
-#   ./scripts/gcp-cdn-armor.sh --mode rate-limit
+#   # 模式 A：IP 白名單（只有自己能看，自動偵測目前 IP）
+#   ./scripts/gcp-cdn-armor.sh --mode allowlist
+#   ALLOW_IPS="1.2.3.4/32,5.6.7.8/32" ./scripts/gcp-cdn-armor.sh --mode allowlist
 #
-#   # 模式 B：IP 白名單（只有自己能看，最嚴格）
-#   ALLOW_IPS="1.2.3.4,5.6.7.8" ./scripts/gcp-cdn-armor.sh --mode allowlist
+#   # 模式 B：完全開放（公開測試，保留 policy 可快速切回）
+#   ./scripts/gcp-cdn-armor.sh --mode allow-all
 #
 #   # 模式 C：完全封鎖（非測試期間使用，所有請求一律 403）
 #   ./scripts/gcp-cdn-armor.sh --mode deny-all
 #
-#   # 移除防護規則
+#   # 移除防護規則（刪除 policy）
 #   ./scripts/gcp-cdn-armor.sh --mode remove
+# =============================================================================
+# ⚠️  注意：此腳本針對 Cloud CDN Backend Bucket 使用 CLOUD_ARMOR_EDGE 類型。
+#    Edge Policy 限制：
+#      - 掛載指令：--edge-security-policy（非 --security-policy）
+#      - 規則：--src-ip-ranges（非 CEL expression）
+#      - 不支援 rate-based-ban（該功能只適用 Backend Service）
 # =============================================================================
 
 set -euo pipefail
@@ -28,8 +35,6 @@ set -euo pipefail
 PROJECT_ID="${GCP_PROJECT_ID:-omega-pivot-488513-k6}"
 BACKEND_BUCKET="deltacast-backend"
 ARMOR_POLICY="deltacast-armor"
-# 每 IP 每 60 秒允許的最大請求數（超過則返回 429）
-RATE_LIMIT_THRESHOLD="${RATE_LIMIT_THRESHOLD:-60}"
 # 逗號分隔的白名單 IP（支援 CIDR），例如 "1.2.3.4/32,5.6.7.0/24"
 ALLOW_IPS="${ALLOW_IPS:-}"
 
@@ -54,15 +59,16 @@ if [[ "$MODE_VALUE" == "remove" ]]; then
   exit 0
 fi
 
-# ── 建立基礎 Security Policy ─────────────────────────────────────────────────
-info "建立 Cloud Armor Security Policy: $ARMOR_POLICY"
+# ── 建立 Edge Security Policy（Backend Bucket 專用）────────────────────────
+info "建立 Cloud Armor Edge Security Policy: $ARMOR_POLICY"
 if gcloud compute security-policies describe "$ARMOR_POLICY" --quiet 2>/dev/null; then
   warn "Policy 已存在，更新規則..."
 else
   gcloud compute security-policies create "$ARMOR_POLICY" \
     --description="DeltaCast CDN protection" \
+    --type=CLOUD_ARMOR_EDGE \
     --quiet
-  success "Policy 建立完成"
+  success "Edge Policy 建立完成"
 fi
 
 if [[ "$MODE_VALUE" == "allowlist" ]]; then
@@ -75,23 +81,16 @@ if [[ "$MODE_VALUE" == "allowlist" ]]; then
   fi
 
   info "設定 IP 白名單：$ALLOW_IPS"
-  # Rule 1000：允許白名單 IP
-  IFS=',' read -ra IP_LIST <<< "$ALLOW_IPS"
-  EXPR=""
-  for ip in "${IP_LIST[@]}"; do
-    [[ -n "$EXPR" ]] && EXPR="${EXPR} || "
-    EXPR="${EXPR}inIpRange(origin.ip, '${ip}')"
-  done
-
+  # Edge Policy 使用 --src-ip-ranges（逗號分隔），不用 CEL expression
   gcloud compute security-policies rules create 1000 \
     --security-policy="$ARMOR_POLICY" \
-    --expression="$EXPR" \
+    --src-ip-ranges="$ALLOW_IPS" \
     --action=allow \
     --description="Allow whitelisted IPs" \
     --quiet 2>/dev/null || \
   gcloud compute security-policies rules update 1000 \
     --security-policy="$ARMOR_POLICY" \
-    --expression="$EXPR" \
+    --src-ip-ranges="$ALLOW_IPS" \
     --action=allow \
     --description="Allow whitelisted IPs" \
     --quiet
@@ -119,52 +118,43 @@ elif [[ "$MODE_VALUE" == "deny-all" ]]; then
     --quiet
   success "Default rule 設為 deny-403（所有請求一律封鎖）"
 
-elif [[ "$MODE_VALUE" == "rate-limit" ]]; then
-  # ── 模式 B：速率限制 ─────────────────────────────────────────────────────
-  info "設定速率限制：每 IP 每 60 秒最多 $RATE_LIMIT_THRESHOLD 次請求"
+elif [[ "$MODE_VALUE" == "allow-all" ]]; then
+  # ── 模式 D：完全開放（保留 policy，方便快速切回 deny-all）───────────────
+  info "設定完全開放：所有請求一律允許"
 
-  # Rule 1000：速率超標時返回 429
-  gcloud compute security-policies rules create 1000 \
+  # 刪除 priority 1000（若存在）
+  gcloud compute security-policies rules delete 1000 \
+    --security-policy="$ARMOR_POLICY" --quiet 2>/dev/null || true
+
+  # Default rule 設為 allow
+  gcloud compute security-policies rules update 2147483647 \
     --security-policy="$ARMOR_POLICY" \
-    --expression="true" \
-    --action=rate-based-ban \
-    --rate-limit-threshold-count="$RATE_LIMIT_THRESHOLD" \
-    --rate-limit-threshold-interval-sec=60 \
-    --ban-duration-sec=300 \
-    --conform-action=allow \
-    --exceed-action=deny-429 \
-    --enforce-on-key=IP \
-    --description="Rate limit: ${RATE_LIMIT_THRESHOLD} req/min per IP, ban 5min" \
-    --quiet 2>/dev/null || \
-  gcloud compute security-policies rules update 1000 \
-    --security-policy="$ARMOR_POLICY" \
-    --expression="true" \
-    --action=rate-based-ban \
-    --rate-limit-threshold-count="$RATE_LIMIT_THRESHOLD" \
-    --rate-limit-threshold-interval-sec=60 \
-    --ban-duration-sec=300 \
-    --conform-action=allow \
-    --exceed-action=deny-429 \
-    --enforce-on-key=IP \
-    --description="Rate limit: ${RATE_LIMIT_THRESHOLD} req/min per IP, ban 5min" \
+    --action=allow \
     --quiet
-  success "速率限制規則設定完成（Priority 1000）"
+  success "Default rule 設為 allow（所有請求開放）"
+
+elif [[ "$MODE_VALUE" == "rate-limit" ]]; then
+  # ── 模式 B：速率限制（Edge Policy 不支援）────────────────────────────────
+  echo -e "${RED}[ERR]${NC}  rate-limit 不支援 Backend Bucket（CLOUD_ARMOR_EDGE）。"
+  echo "       rate-based-ban 只適用於 Backend Service（VM/NEG）。"
+  echo "       測試期間建議改用：--mode allowlist、--mode allow-all 或 --mode deny-all"
+  exit 1
 else
   echo "未知模式：$MODE_VALUE"
-  echo "用法: ./gcp-cdn-armor.sh --mode [rate-limit|allowlist|deny-all|remove]"
+  echo "用法: ./gcp-cdn-armor.sh --mode [allowlist|allow-all|deny-all|remove]"
   exit 1
 fi
 
-# ── 將 Policy 掛到 Backend Bucket ────────────────────────────────────────────
-info "將 Security Policy 掛到 Backend Bucket: $BACKEND_BUCKET"
+# ── 將 Edge Policy 掛到 Backend Bucket ──────────────────────────────────────
+info "將 Edge Security Policy 掛到 Backend Bucket: $BACKEND_BUCKET"
 gcloud compute backend-buckets update "$BACKEND_BUCKET" \
-  --security-policy="$ARMOR_POLICY" \
+  --edge-security-policy="$ARMOR_POLICY" \
   --quiet
-success "Cloud Armor 已啟用於 CDN"
+success "Cloud Armor Edge Policy 已啟用於 CDN"
 
 echo ""
 echo -e "${GREEN}=================================================${NC}"
-echo -e "${GREEN}  ✅  Cloud Armor 設定完成（模式：$MODE_VALUE）${NC}"
+echo -e "${GREEN}  ✅  Cloud Armor 設定完成（模式：${MODE_VALUE}）${NC}"
 echo -e "${GREEN}=================================================${NC}"
 echo ""
 info "目前規則："
