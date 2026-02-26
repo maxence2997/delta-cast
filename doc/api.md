@@ -1,8 +1,6 @@
 # DeltaCast API 文件
 
-## 概觀
-
-DeltaCast 是一個「一進多出」直播轉發系統。推流端透過 Agora RTC 推流，後端協調將串流轉發至 YouTube（RTMP）與 Google Cloud Live Stream API（HLS via Cloud CDN）。
+> 系統架構、Session 狀態機與完整流程圖見 [`doc/spec.md`](spec.md) 第 3 節。
 
 ---
 
@@ -16,29 +14,6 @@ Authorization: Bearer <JWT>
 
 JWT 使用 **HS256** 演算法簽發，secret 對應環境變數 `JWT_SECRET`。  
 Webhook 端點不需要 JWT，改用 **Agora HMAC/SHA1 簽章驗證**（`Agora-Signature` Header）。
-
----
-
-## Session 狀態機
-
-```mermaid
-stateDiagram-v2
-    [*] --> idle
-    idle --> preparing : POST /v1/live/prepare
-    preparing --> ready : GCP + YouTube 資源就緒（非同步，約 30-60s）
-    preparing --> idle : 資源分配失敗
-    ready --> live : Agora NCS channel event (eventType=103)
-    live --> stopping : POST /v1/live/stop
-    stopping --> idle : 清理完成
-```
-
-| 狀態        | 說明                                        |
-| ----------- | ------------------------------------------- |
-| `idle`      | 無活躍 Session                              |
-| `preparing` | GCP 與 YouTube 資源建立中（背景非同步執行） |
-| `ready`     | 資源就緒，等待推流                          |
-| `live`      | 串流進行中                                  |
-| `stopping`  | 資源清理中                                  |
 
 ---
 
@@ -204,13 +179,13 @@ stateDiagram-v2
 
 **各狀態下欄位可用性**：
 
-| 狀態 | `gcpPlaybackUrl` | `youtubeWatchUrl` | 有實際內容？ |
-|------|-----------------|-------------------|-------------|
-| `idle` | 空字串 | 空字串 | 否 |
-| `preparing` | 空字串 | 空字串 | 否 |
-| `ready` | ✓ 已填入 | ✓ 已填入 | 否（資源就緒但尚未推流）|
-| `live` | ✓ 已填入 | ✓ 已填入 | **是** |
-| `stopping` | ✓ 已填入 | ✓ 已填入 | 停止中 |
+| 狀態        | `gcpPlaybackUrl` | `youtubeWatchUrl` | 有實際內容？             |
+| ----------- | ---------------- | ----------------- | ------------------------ |
+| `idle`      | 空字串           | 空字串            | 否                       |
+| `preparing` | 空字串           | 空字串            | 否                       |
+| `ready`     | ✓ 已填入         | ✓ 已填入          | 否（資源就緒但尚未推流） |
+| `live`      | ✓ 已填入         | ✓ 已填入          | **是**                   |
+| `stopping`  | ✓ 已填入         | ✓ 已填入          | 停止中                   |
 
 > 收播端只需輪詢此端點，在 `state === "live"` 時取用兩條 URL 即可。因為 POC 單一 Session，不需要額外的房間選擇邏輯。
 
@@ -320,131 +295,6 @@ Content-Type: application/json
 | 4         | Converter 已銷毀（`destroyReason` 填原因） |
 
 > 目前僅做 log，不觸發額外狀態變更。
-
----
-
-## 完整流程圖
-
-### 開播流程
-
-```mermaid
-sequenceDiagram
-    actor Streamer as 推流端
-    participant API as DeltaCast API
-    participant GCP as GCP Live Stream API
-    participant YT as YouTube Data API
-    participant AgoraRTC as Agora RTC SDK
-    participant AgoraMP as Agora Media Push
-    participant NCS as Agora NCS (Webhook)
-
-    Streamer->>API: POST /v1/live/prepare (JWT)
-    API-->>Streamer: 200 { state: "preparing" }
-    Note over API: 背景非同步分配資源（約 30-60 秒）
-
-    par 背景並行資源分配
-        API->>GCP: CreateInput → CreateChannel → WaitForChannelReady → StartChannel
-        GCP-->>API: inputURI
-    and
-        API->>YT: CreateBroadcast → CreateStream → BindBroadcastToStream
-        YT-->>API: broadcastID, rtmpURL, streamKey
-    end
-
-    Note over API: Session state: preparing → ready
-
-    loop 每 2 秒輪詢直到 state = "ready"
-        Streamer->>API: GET /v1/live/status (JWT)
-        API-->>Streamer: { state: "preparing" | "ready", ... }
-    end
-
-    Streamer->>API: POST /v1/live/start (JWT)
-    API-->>Streamer: { agoraToken, agoraChannel, agoraAppId }
-    Note over API: Session state 維持 "ready"（start 不改變狀態）
-
-    Streamer->>AgoraRTC: joinChannel(agoraToken) + publish(H.264)
-    Note over AgoraRTC: Agora 偵測到主播加入頻道
-
-    AgoraRTC-->>NCS: 觸發 RTC Channel Event (eventType=103)
-    NCS->>API: POST /v1/webhook/agora/channel
-    Note over API: Session state: ready → live
-
-    par 觸發轉發
-        API->>AgoraMP: StartMediaPush → GCP RTMP Input URI
-        AgoraMP-->>API: gcpConverterID
-    and
-        API->>AgoraMP: StartMediaPush → YouTube RTMP URL+Key
-        AgoraMP-->>API: ytConverterID
-    end
-
-    API->>YT: TransitionBroadcast("live")
-
-    loop 繼續輪詢以取得播放 URL
-        Streamer->>API: GET /v1/live/status (JWT)
-        API-->>Streamer: { state: "live", gcpPlaybackUrl, youtubeWatchUrl }
-    end
-
-    Note over GCP: RTMP → 轉碼 → HLS → GCS → Cloud CDN
-    Note over YT: YouTube 直播開始播放
-```
-
-### 收播端流程
-
-```mermaid
-sequenceDiagram
-    actor Audience as 收播端
-    participant API as DeltaCast API
-    participant CDN as Cloud CDN (HLS)
-    participant YT as YouTube
-
-    Note over Audience: 頁面載入後開始輪詢
-    loop 每 2 秒，直到 state = "live"
-        Audience->>API: GET /v1/live/status (JWT)
-        API-->>Audience: { state, gcpPlaybackUrl, youtubeWatchUrl }
-    end
-
-    Note over Audience: state = "live" → 取用播放 URL
-
-    Audience->>CDN: HLS 播放（gcpPlaybackUrl → *.m3u8）
-    CDN-->>Audience: HLS segments（延遲約 10-30 秒）
-
-    Audience->>YT: YouTube 嵌入播放（youtubeWatchUrl）
-    YT-->>Audience: YouTube 串流（延遲約 5-10 秒）
-
-    loop 持續輪詢偵測關播
-        Audience->>API: GET /v1/live/status (JWT)
-        API-->>Audience: { state: "idle" }
-    end
-    Note over Audience: state = "idle" → 顯示「無直播」
-```
-
-> **收播端設計重點**：
-> - 不需要呼叫 `prepare` / `start` / `stop`，只需 `GET /v1/live/status`
-> - JWT Token 與推流端共用同一組（POC 無使用者系統）
-> - `gcpPlaybackUrl` 回傳完整 `.m3u8` URL，直接餵給 HLS 播放器（video.js）
-> - `youtubeWatchUrl` 格式為 `https://www.youtube.com/watch?v={broadcastId}`，可直接給 YouTube 播放器元件
-
-### 關播流程
-
-```mermaid
-sequenceDiagram
-    actor Streamer as 推流端
-    participant API as DeltaCast API
-    participant Agora as Agora Media Push
-    participant YT as YouTube Data API
-    participant GCP as GCP Live Stream API
-
-    Streamer->>API: POST /v1/live/stop (JWT)
-    Note over API: Session state → "stopping"
-
-    API->>Agora: StopMediaPush(gcpConverterID)
-    API->>Agora: StopMediaPush(ytConverterID)
-    API->>YT: TransitionBroadcast("complete")
-    API->>GCP: StopChannel
-    API->>GCP: DeleteChannel
-    API->>GCP: DeleteInput
-
-    Note over API: Session state → "idle"
-    API-->>Streamer: { state: "idle", message: "session stopped..." }
-```
 
 ---
 
