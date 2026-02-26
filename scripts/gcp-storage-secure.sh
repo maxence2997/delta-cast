@@ -33,7 +33,11 @@ set -euo pipefail
 # ── 載入環境變數 ──────────────────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck disable=SC1091
-[ -f "${SCRIPT_DIR}/../.env" ] && source "${SCRIPT_DIR}/../.env"
+if [ -f "${SCRIPT_DIR}/.env.local" ]; then
+  source "${SCRIPT_DIR}/.env.local"
+elif [ -f "${SCRIPT_DIR}/.env" ]; then
+  source "${SCRIPT_DIR}/.env"
+fi
 
 # ── 必填變數檢查 ──────────────────────────────────────────────────────────────
 MISSING=()

@@ -19,8 +19,7 @@
 #
 # 執行方式：
 #   chmod +x scripts/youtube-teardown.sh
-#   YOUTUBE_CLIENT_ID=xxx YOUTUBE_CLIENT_SECRET=xxx YOUTUBE_REFRESH_TOKEN=xxx \
-#     ./scripts/youtube-teardown.sh
+#   ./scripts/youtube-teardown.sh
 #
 # 若要跳過確認提示（CI 環境）：
 #   SKIP_CONFIRM=1 ./scripts/youtube-teardown.sh
@@ -31,7 +30,11 @@ set -euo pipefail
 # ── 載入環境變數 ──────────────────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck disable=SC1091
-[ -f "${SCRIPT_DIR}/../.env" ] && source "${SCRIPT_DIR}/../.env"
+if [ -f "${SCRIPT_DIR}/.env.local" ]; then
+  source "${SCRIPT_DIR}/.env.local"
+elif [ -f "${SCRIPT_DIR}/.env" ]; then
+  source "${SCRIPT_DIR}/.env"
+fi
 
 # ── 必填變數檢查 ──────────────────────────────────────────────────────────────
 if [ -z "${GCP_PROJECT_ID:-}" ]; then

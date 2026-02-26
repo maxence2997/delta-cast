@@ -18,7 +18,7 @@
 #
 # 執行方式：
 #   chmod +x scripts/youtube-setup.sh
-#   GCP_PROJECT_ID=your-project ./scripts/youtube-setup.sh
+#   ./scripts/youtube-setup.sh
 #
 #   若已有 Refresh Token 只想驗證：
 #   YOUTUBE_REFRESH_TOKEN=xxx ./scripts/youtube-setup.sh
@@ -29,7 +29,11 @@ set -euo pipefail
 # ── 載入環境變數 ──────────────────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck disable=SC1091
-[ -f "${SCRIPT_DIR}/../.env" ] && source "${SCRIPT_DIR}/../.env"
+if [ -f "${SCRIPT_DIR}/.env.local" ]; then
+  source "${SCRIPT_DIR}/.env.local"
+elif [ -f "${SCRIPT_DIR}/.env" ]; then
+  source "${SCRIPT_DIR}/.env"
+fi
 
 # ── 必填變數檢查 ──────────────────────────────────────────────────────────────
 if [ -z "${GCP_PROJECT_ID:-}" ]; then
@@ -40,9 +44,26 @@ fi
 
 # ── 設定 ──────────────────────────────────────────────────────────────────────
 PROJECT_ID="${GCP_PROJECT_ID}"
-REDIRECT_PORT="8080"
-REDIRECT_URI="http://localhost:${REDIRECT_PORT}/oauth/callback"
 YOUTUBE_SCOPE="https://www.googleapis.com/auth/youtube"
+
+# 自動找到一個可用的 port（從 8080 開始往下找）
+find_free_port() {
+  local port
+  for port in 8080 8081 8082 8083 8084 8085; do
+    if ! lsof -iTCP:${port} -sTCP:LISTEN -t &>/dev/null; then
+      echo "$port"
+      return
+    fi
+  done
+  echo "" # 全部占用
+}
+
+REDIRECT_PORT=$(find_free_port)
+if [[ -z "$REDIRECT_PORT" ]]; then
+  err "無法找到可用 port（8080-8085 皆被占用），請手動釋放後重試。"
+  exit 1
+fi
+REDIRECT_URI="http://localhost:${REDIRECT_PORT}/oauth/callback"
 
 # ── 顏色輸出 ──────────────────────────────────────────────────────────────────
 RED='\033[0;31m'
@@ -93,6 +114,14 @@ echo "    1. 點擊「+ CREATE CREDENTIALS」→「OAuth client ID」"
 echo "    2. Application type：選擇 Web application"
 echo "    3. Authorized redirect URIs：新增 ${REDIRECT_URI}"
 echo "    4. 建立後，記錄 Client ID 與 Client Secret"
+echo ""
+echo "  ⚠️  若授權時出現 access_denied 錯誤："
+echo "    - 前往 https://console.cloud.google.com/apis/credentials/consent?project=${PROJECT_ID}"
+echo "    - 在「Test users」區塊新增你的 Google 帳號"
+echo "    - 儲存後再重新授權"
+echo ""
+echo "  ℹ️  本次使用的 callback port：${REDIRECT_PORT}"
+echo "     若與 OAuth client 設定的 redirect URI 不符，請在 Console 新增 ${REDIRECT_URI}"
 echo ""
 
 # 幂等性：若環境變數已設定則跳過輸入
