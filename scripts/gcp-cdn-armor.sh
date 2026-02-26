@@ -16,6 +16,9 @@
 #   # 模式 B：IP 白名單（只有自己能看，最嚴格）
 #   ALLOW_IPS="1.2.3.4,5.6.7.8" ./scripts/gcp-cdn-armor.sh --mode allowlist
 #
+#   # 模式 C：完全封鎖（非測試期間使用，所有請求一律 403）
+#   ./scripts/gcp-cdn-armor.sh --mode deny-all
+#
 #   # 移除防護規則
 #   ./scripts/gcp-cdn-armor.sh --mode remove
 # =============================================================================
@@ -101,6 +104,21 @@ if [[ "$MODE_VALUE" == "allowlist" ]]; then
     --quiet
   success "Default rule 設為 deny-403（白名單以外一律擋）"
 
+elif [[ "$MODE_VALUE" == "deny-all" ]]; then
+  # ── 模式 C：完全封鎖 ──────────────────────────────────────────────────────
+  info "設定完全封鎖：所有請求一律 403"
+
+  # 刪除 priority 1000（若存在）避免有殘留 allow 規則
+  gcloud compute security-policies rules delete 1000 \
+    --security-policy="$ARMOR_POLICY" --quiet 2>/dev/null || true
+
+  # Default rule 設為 deny-403
+  gcloud compute security-policies rules update 2147483647 \
+    --security-policy="$ARMOR_POLICY" \
+    --action=deny-403 \
+    --quiet
+  success "Default rule 設為 deny-403（所有請求一律封鎖）"
+
 elif [[ "$MODE_VALUE" == "rate-limit" ]]; then
   # ── 模式 B：速率限制 ─────────────────────────────────────────────────────
   info "設定速率限制：每 IP 每 60 秒最多 $RATE_LIMIT_THRESHOLD 次請求"
@@ -133,7 +151,7 @@ elif [[ "$MODE_VALUE" == "rate-limit" ]]; then
   success "速率限制規則設定完成（Priority 1000）"
 else
   echo "未知模式：$MODE_VALUE"
-  echo "用法: ./gcp-cdn-armor.sh --mode [rate-limit|allowlist|remove]"
+  echo "用法: ./gcp-cdn-armor.sh --mode [rate-limit|allowlist|deny-all|remove]"
   exit 1
 fi
 
