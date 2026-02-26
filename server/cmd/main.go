@@ -21,7 +21,8 @@ func main() {
 	// Providers
 	agoraTokenProvider := provider.NewAgoraTokenProvider(cfg.AgoraAppID, cfg.AgoraAppCertificate)
 	agoraMediaPushProvider := provider.NewAgoraMediaPushProvider(cfg.AgoraAppID, cfg.AgoraRegion, cfg.AgoraRESTKey, cfg.AgoraRESTSecret, cfg.AgoraTranscodingEnabled)
-	agoraNCSProvider := provider.NewAgoraNCSProvider(cfg.AgoraNCSSecret)
+	agoraChannelNCSProvider := provider.NewAgoraChannelNCSProvider(cfg.AgoraChannelNCSSecret)
+	agoraMediaPushNCSProvider := provider.NewAgoraMediaPushNCSProvider(cfg.AgoraMediaPushNCSSecret)
 	gcpProvider := provider.NewGCPLiveStreamProvider(cfg.GCPProjectID, cfg.GCPRegion, cfg.GCPBucketName, cfg.GCPCDNDomain)
 	youtubeProvider := provider.NewYouTubeProvider(cfg.YouTubeClientID, cfg.YouTubeClientSecret, cfg.YouTubeRefreshToken)
 
@@ -30,7 +31,7 @@ func main() {
 
 	// Handlers
 	liveHandler := handler.NewLiveHandler(liveSvc, cfg.AgoraAppID)
-	webhookHandler := handler.NewWebhookHandler(liveSvc, agoraNCSProvider)
+	webhookHandler := handler.NewWebhookHandler(liveSvc, agoraChannelNCSProvider, agoraMediaPushNCSProvider)
 
 	// Router
 	r := gin.Default()
@@ -50,7 +51,8 @@ func main() {
 			live.GET("/status", liveHandler.Status)
 		}
 
-		v1.POST("/webhook/agora", webhookHandler.HandleAgora)
+		v1.POST("/webhook/agora/channel", webhookHandler.HandleAgoraChannelEvent)
+		v1.POST("/webhook/agora/media-push", webhookHandler.HandleAgoraMediaPushEvent)
 	}
 
 	addr := fmt.Sprintf(":%s", cfg.ServerPort)

@@ -229,12 +229,41 @@ func (s *LiveService) Start(ctx context.Context, appID string) (*model.StartResp
 	}, nil
 }
 
-// HandleAgoraWebhook processes Agora NCS events.
-// For event 101 (broadcaster joins channel), it triggers Media Push to both targets.
+// HandleMediaPushWebhook processes Agora Media Push notification events (productId=5).
+// Event types: 1=ConverterCreated, 2=ConverterConfigChanged, 3=ConverterStateChanged, 4=ConverterDestroyed.
+func (s *LiveService) HandleMediaPushWebhook(_ context.Context, eventType int, converterID, converterState, destroyReason string) error {
+	switch eventType {
+	case 1:
+		log.Printf("media push converter created: id=%s", converterID)
+	case 2:
+		log.Printf("media push converter config changed: id=%s", converterID)
+	case 3:
+		switch converterState {
+		case "running":
+			log.Printf("media push converter running: id=%s", converterID)
+		case "failed":
+			log.Printf("ERROR: media push converter failed: id=%s", converterID)
+		default:
+			log.Printf("media push converter state changed: id=%s state=%s", converterID, converterState)
+		}
+	case 4:
+		if destroyReason == "Internal Error" {
+			log.Printf("ERROR: media push converter destroyed unexpectedly: id=%s reason=%s", converterID, destroyReason)
+		} else {
+			log.Printf("media push converter destroyed: id=%s reason=%s", converterID, destroyReason)
+		}
+	default:
+		log.Printf("media push unknown event type %d: id=%s", eventType, converterID)
+	}
+	return nil
+}
+
+// HandleChannelWebhook processes Agora RTC Channel NCS events (productId=1).
+// For event 103 (broadcaster joins channel), it triggers Media Push to both targets.
 // uid is the broadcaster's Agora RTC UID extracted from the NCS payload.
-func (s *LiveService) HandleAgoraWebhook(ctx context.Context, eventType int, uid uint32) error {
-	// Only handle event 101 (channel create / broadcaster joined)
-	if eventType != 101 {
+func (s *LiveService) HandleChannelWebhook(ctx context.Context, eventType int, uid uint32) error {
+	// Only handle event 103 (broadcaster join channel)
+	if eventType != 103 {
 		log.Printf("ignoring agora event type %d", eventType)
 		return nil
 	}

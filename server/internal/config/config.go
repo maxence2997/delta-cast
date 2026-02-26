@@ -18,7 +18,10 @@ type Config struct {
 	AgoraAppCertificate string
 	AgoraRESTKey        string
 	AgoraRESTSecret     string
-	AgoraNCSSecret string
+	// AgoraChannelNCSSecret is the secret for RTC Channel Event Callbacks (Console → Notifications → RTC Channel Event Callbacks).
+	AgoraChannelNCSSecret string
+	// AgoraMediaPushNCSSecret is the secret for Media Push Restful API notifications (Console → Notifications → Media Push Restful API).
+	AgoraMediaPushNCSSecret string
 	// AgoraRegion sets the Agora Media Push API region.
 	// Must match the CDN origin location. Values: cn, ap, na, eu.
 	AgoraRegion string
@@ -48,7 +51,8 @@ func Load() (*Config, error) {
 		AgoraAppCertificate:     os.Getenv("AGORA_APP_CERTIFICATE"),
 		AgoraRESTKey:            os.Getenv("AGORA_REST_KEY"),
 		AgoraRESTSecret:         os.Getenv("AGORA_REST_SECRET"),
-		AgoraNCSSecret:          os.Getenv("AGORA_NCS_SECRET"),
+		AgoraChannelNCSSecret:   os.Getenv("AGORA_CHANNEL_NCS_SECRET"),
+		AgoraMediaPushNCSSecret: os.Getenv("AGORA_MEDIA_PUSH_NCS_SECRET"),
 		AgoraRegion:             getEnv("AGORA_REGION", "ap"),
 		AgoraTranscodingEnabled: getEnvBool("AGORA_TRANSCODING_ENABLED", false),
 		GCPProjectID:            os.Getenv("GCP_PROJECT_ID"),
@@ -68,18 +72,19 @@ func Load() (*Config, error) {
 
 func (c *Config) validate() error {
 	required := map[string]string{
-		"JWT_SECRET":            c.JWTSecret,
-		"AGORA_APP_ID":          c.AgoraAppID,
-		"AGORA_APP_CERTIFICATE": c.AgoraAppCertificate,
-		"AGORA_REST_KEY":        c.AgoraRESTKey,
-		"AGORA_REST_SECRET":     c.AgoraRESTSecret,
-		"AGORA_NCS_SECRET":      c.AgoraNCSSecret,
-		"GCP_PROJECT_ID":        c.GCPProjectID,
-		"GCP_BUCKET_NAME":       c.GCPBucketName,
-		"GCP_CDN_DOMAIN":        c.GCPCDNDomain,
-		"YOUTUBE_CLIENT_ID":     c.YouTubeClientID,
-		"YOUTUBE_CLIENT_SECRET": c.YouTubeClientSecret,
-		"YOUTUBE_REFRESH_TOKEN": c.YouTubeRefreshToken,
+		"JWT_SECRET":                  c.JWTSecret,
+		"AGORA_APP_ID":                c.AgoraAppID,
+		"AGORA_APP_CERTIFICATE":       c.AgoraAppCertificate,
+		"AGORA_REST_KEY":              c.AgoraRESTKey,
+		"AGORA_REST_SECRET":           c.AgoraRESTSecret,
+		"AGORA_CHANNEL_NCS_SECRET":    c.AgoraChannelNCSSecret,
+		"AGORA_MEDIA_PUSH_NCS_SECRET": c.AgoraMediaPushNCSSecret,
+		"GCP_PROJECT_ID":              c.GCPProjectID,
+		"GCP_BUCKET_NAME":             c.GCPBucketName,
+		"GCP_CDN_DOMAIN":              c.GCPCDNDomain,
+		"YOUTUBE_CLIENT_ID":           c.YouTubeClientID,
+		"YOUTUBE_CLIENT_SECRET":       c.YouTubeClientSecret,
+		"YOUTUBE_REFRESH_TOKEN":       c.YouTubeRefreshToken,
 	}
 
 	for key, val := range required {

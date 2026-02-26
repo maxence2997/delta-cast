@@ -19,9 +19,17 @@ type AgoraMediaPushProvider interface {
 	StopMediaPush(ctx context.Context, converterID string) error
 }
 
-// AgoraNCSProvider handles Agora Notification Callback Service signature verification.
-type AgoraNCSProvider interface {
-	// VerifySignature validates the Agora NCS webhook signature.
+// AgoraChannelNCSProvider verifies webhook signatures for RTC Channel Event Callbacks.
+// Corresponds to the secret under Console → Notifications → RTC Channel Event Callbacks.
+type AgoraChannelNCSProvider interface {
+	// VerifySignature validates the Agora RTC Channel NCS webhook signature (HMAC/SHA1).
+	VerifySignature(body []byte, signature string) bool
+}
+
+// AgoraMediaPushNCSProvider verifies webhook signatures for Media Push Restful API notifications.
+// Corresponds to the secret under Console → Notifications → Media Push Restful API.
+type AgoraMediaPushNCSProvider interface {
+	// VerifySignature validates the Agora Media Push NCS webhook signature (HMAC/SHA1).
 	VerifySignature(body []byte, signature string) bool
 }
 

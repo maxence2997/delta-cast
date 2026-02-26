@@ -181,7 +181,7 @@ func TestStart_WhenReady(t *testing.T) {
 	}
 }
 
-func TestHandleWebhook_Event101_MovesToLive(t *testing.T) {
+func TestHandleChannelWebhook_BroadcasterJoin_MovesToLive(t *testing.T) {
 	svc, pushProv, _, _ := newTestService()
 
 	svc.session.ID = "test-session"
@@ -191,7 +191,7 @@ func TestHandleWebhook_Event101_MovesToLive(t *testing.T) {
 	svc.session.YouTubeRTMPURL = "rtmp://yt"
 	svc.session.YouTubeBroadcastID = "bc-123"
 
-	err := svc.HandleAgoraWebhook(context.Background(), 101, 12345)
+	err := svc.HandleChannelWebhook(context.Background(), 103, 12345)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -204,14 +204,14 @@ func TestHandleWebhook_Event101_MovesToLive(t *testing.T) {
 	}
 }
 
-func TestHandleWebhook_Idempotent(t *testing.T) {
+func TestHandleChannelWebhook_Idempotent(t *testing.T) {
 	svc, pushProv, _, _ := newTestService()
 
 	svc.session.ID = "test-session"
 	svc.session.State = model.StateLive
 	svc.session.AgoraChannel = "ch"
 
-	err := svc.HandleAgoraWebhook(context.Background(), 101, 12345)
+	err := svc.HandleChannelWebhook(context.Background(), 103, 12345)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -226,7 +226,7 @@ func TestHandleWebhook_IgnoresOtherEvents(t *testing.T) {
 
 	svc.session.State = model.StateReady
 
-	err := svc.HandleAgoraWebhook(context.Background(), 102, 0)
+	err := svc.HandleChannelWebhook(context.Background(), 102, 0)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
