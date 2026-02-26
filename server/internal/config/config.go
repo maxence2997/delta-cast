@@ -19,6 +19,10 @@ type Config struct {
 	AgoraRESTKey        string
 	AgoraRESTSecret     string
 	AgoraNCSSecret      string
+	// AgoraTranscodingEnabled controls whether Agora Media Push re-encodes the stream
+	// before relaying to RTMP targets. Defaults to false (raw push, no transcoding)
+	// to reduce costs, since both GCP and YouTube can accept the raw RTMP stream.
+	AgoraTranscodingEnabled bool
 
 	// GCP
 	GCPProjectID  string
@@ -35,20 +39,21 @@ type Config struct {
 // Load reads configuration from environment variables and validates required fields.
 func Load() (*Config, error) {
 	cfg := &Config{
-		ServerPort:          getEnv("SERVER_PORT", "8080"),
-		JWTSecret:           os.Getenv("JWT_SECRET"),
-		AgoraAppID:          os.Getenv("AGORA_APP_ID"),
-		AgoraAppCertificate: os.Getenv("AGORA_APP_CERTIFICATE"),
-		AgoraRESTKey:        os.Getenv("AGORA_REST_KEY"),
-		AgoraRESTSecret:     os.Getenv("AGORA_REST_SECRET"),
-		AgoraNCSSecret:      os.Getenv("AGORA_NCS_SECRET"),
-		GCPProjectID:        os.Getenv("GCP_PROJECT_ID"),
-		GCPRegion:           getEnv("GCP_REGION", "us-central1"),
-		GCPBucketName:       os.Getenv("GCP_BUCKET_NAME"),
-		GCPCDNDomain:        os.Getenv("GCP_CDN_DOMAIN"),
-		YouTubeClientID:     os.Getenv("YOUTUBE_CLIENT_ID"),
-		YouTubeClientSecret: os.Getenv("YOUTUBE_CLIENT_SECRET"),
-		YouTubeRefreshToken: os.Getenv("YOUTUBE_REFRESH_TOKEN"),
+		ServerPort:              getEnv("SERVER_PORT", "8080"),
+		JWTSecret:               os.Getenv("JWT_SECRET"),
+		AgoraAppID:              os.Getenv("AGORA_APP_ID"),
+		AgoraAppCertificate:     os.Getenv("AGORA_APP_CERTIFICATE"),
+		AgoraRESTKey:            os.Getenv("AGORA_REST_KEY"),
+		AgoraRESTSecret:         os.Getenv("AGORA_REST_SECRET"),
+		AgoraNCSSecret:          os.Getenv("AGORA_NCS_SECRET"),
+		AgoraTranscodingEnabled: getEnvBool("AGORA_TRANSCODING_ENABLED", false),
+		GCPProjectID:            os.Getenv("GCP_PROJECT_ID"),
+		GCPRegion:               getEnv("GCP_REGION", "us-central1"),
+		GCPBucketName:           os.Getenv("GCP_BUCKET_NAME"),
+		GCPCDNDomain:            os.Getenv("GCP_CDN_DOMAIN"),
+		YouTubeClientID:         os.Getenv("YOUTUBE_CLIENT_ID"),
+		YouTubeClientSecret:     os.Getenv("YOUTUBE_CLIENT_SECRET"),
+		YouTubeRefreshToken:     os.Getenv("YOUTUBE_REFRESH_TOKEN"),
 	}
 
 	if err := cfg.validate(); err != nil {
@@ -86,4 +91,12 @@ func getEnv(key, fallback string) string {
 		return val
 	}
 	return fallback
+}
+
+func getEnvBool(key string, fallback bool) bool {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	return v == "true" || v == "1"
 }

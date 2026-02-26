@@ -37,7 +37,7 @@ delta-cast/
 │       ├── deploy-server.yml   # 後端部署腳本
 │       ├── deploy-web.yml      # 前端部署腳本
 │       ├── deploy-ios.yml      # iOS 部署腳本（未來）
-│       └── deploy-android.yml  # Android 部署腳本（未來）  
+│       └── deploy-android.yml  # Android 部署腳本（未來）
 ├── docker-compose.yml          # 本地一次性啟動所有服務進行整合測試
 └── Makefile                    # 常用命令（如 `make run-server`, `make run-web`, `make test` 等）
 ```
@@ -118,6 +118,12 @@ delta-cast/
 1. 複製 `server/.env.example` 到 `server/.env`。
 2. 填入所有必要的 API 金鑰與配置。
 3. **禁止**將 `.env` 加入版本控制（已在 `.gitignore` 中排除）。
+
+**關鍵選用環境變數：**
+
+| 變數名稱                  | 預設值  | 說明                                                                                                                                                                                                          |
+| ------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AGORA_TRANSCODING_ENABLED` | `false` | 是否啟用 Agora Media Push 轉碼。`false`（預設）為直推模式，不重新編碼原始串流，費用最低，適合 POC 驗證（GCP 與 YouTube 均可直接接收 RTMP 串流）。設為 `true` 可啟用 H.264/AAC 720p 轉碼，適合推流端格式不確定的場景。詳見 `doc/spec.md` 第 4 節。 |
 
 ### 本地開發
 

@@ -13,19 +13,24 @@ import (
 const agoraMediaPushBaseURL = "https://api.agora.io/v1/projects/%s/rtmp-converters"
 
 type agoraMediaPushProvider struct {
-	appID      string
-	restKey    string
-	restSecret string
-	httpClient *http.Client
+	appID       string
+	restKey     string
+	restSecret  string
+	transcoding bool
+	httpClient  *http.Client
 }
 
 // NewAgoraMediaPushProvider creates a new AgoraMediaPushProvider.
-func NewAgoraMediaPushProvider(appID, restKey, restSecret string) AgoraMediaPushProvider {
+// When transcoding is false (default), Media Push relays the raw stream without
+// re-encoding, which reduces costs. Set transcoding to true to enable H.264/AAC
+// re-encoding before the RTMP relay.
+func NewAgoraMediaPushProvider(appID, restKey, restSecret string, transcoding bool) AgoraMediaPushProvider {
 	return &agoraMediaPushProvider{
-		appID:      appID,
-		restKey:    restKey,
-		restSecret: restSecret,
-		httpClient: &http.Client{},
+		appID:       appID,
+		restKey:     restKey,
+		restSecret:  restSecret,
+		transcoding: transcoding,
+		httpClient:  &http.Client{},
 	}
 }
 
@@ -33,15 +38,23 @@ type startPushRequest struct {
 	Converter pushConverter `json:"converter"`
 }
 
+// pushConverter represents the top-level converter config.
+// Exactly one of TranscodeOptions or RawOptions must be set.
 type pushConverter struct {
-	Name             string        `json:"name"`
-	TranscodeOptions transcodeOpts `json:"transcodeOptions"`
+	Name             string         `json:"name"`
+	TranscodeOptions *transcodeOpts `json:"transcodeOptions,omitempty"`
+	RawOptions       *rawOpts       `json:"rawOptions,omitempty"`
 }
 
 type transcodeOpts struct {
 	RtmpURL string    `json:"rtmpUrl"`
 	Audio   audioOpts `json:"audioOptions"`
 	Video   videoOpts `json:"videoOptions"`
+}
+
+// rawOpts is used for non-transcoding (direct relay) mode.
+type rawOpts struct {
+	RtmpURL string `json:"rtmpUrl"`
 }
 
 type audioOpts struct {
@@ -67,29 +80,36 @@ type startPushResponse struct {
 }
 
 // StartMediaPush starts pushing the channel stream to the given RTMP URL.
+// Uses transcoding (H.264/AAC re-encode) or raw relay depending on the provider config.
 func (p *agoraMediaPushProvider) StartMediaPush(ctx context.Context, channelName string, rtmpURL string) (string, error) {
-	reqBody := startPushRequest{
-		Converter: pushConverter{
-			Name: fmt.Sprintf("%s_converter", channelName),
-			TranscodeOptions: transcodeOpts{
-				RtmpURL: rtmpURL,
-				Audio: audioOpts{
-					CodecProfile:  "LC-AAC",
-					SampleRate:    48000,
-					Bitrate:       128,
-					AudioChannels: 2,
-				},
-				Video: videoOpts{
-					Codec:      "H264",
-					Width:      1280,
-					Height:     720,
-					Fps:        30,
-					Bitrate:    2500,
-					GopSeconds: 2,
-				},
-			},
-		},
+	converter := pushConverter{
+		Name: fmt.Sprintf("%s_converter", channelName),
 	}
+
+	if p.transcoding {
+		converter.TranscodeOptions = &transcodeOpts{
+			RtmpURL: rtmpURL,
+			Audio: audioOpts{
+				CodecProfile:  "LC-AAC",
+				SampleRate:    48000,
+				Bitrate:       128,
+				AudioChannels: 2,
+			},
+			Video: videoOpts{
+				Codec:      "H264",
+				Width:      1280,
+				Height:     720,
+				Fps:        30,
+				Bitrate:    2500,
+				GopSeconds: 2,
+			},
+		}
+	} else {
+		// Raw relay: push the stream as-is without re-encoding.
+		converter.RawOptions = &rawOpts{RtmpURL: rtmpURL}
+	}
+
+	reqBody := startPushRequest{Converter: converter}
 
 	bodyBytes, err := json.Marshal(reqBody)
 	if err != nil {

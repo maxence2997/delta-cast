@@ -86,6 +86,7 @@ func (p *gcpLiveStreamProvider) CreateInput(ctx context.Context, inputID string)
 }
 
 // CreateChannel creates a live stream channel attached to the given input.
+// The channel is configured with H.264/AAC transcoding for HLS output via GCS.
 func (p *gcpLiveStreamProvider) CreateChannel(ctx context.Context, channelID string, inputID string) (string, error) {
 	client, err := p.getClient(ctx)
 	if err != nil {
