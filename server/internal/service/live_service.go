@@ -231,7 +231,8 @@ func (s *LiveService) Start(ctx context.Context, appID string) (*model.StartResp
 
 // HandleAgoraWebhook processes Agora NCS events.
 // For event 101 (broadcaster joins channel), it triggers Media Push to both targets.
-func (s *LiveService) HandleAgoraWebhook(ctx context.Context, eventType int) error {
+// uid is the broadcaster's Agora RTC UID extracted from the NCS payload.
+func (s *LiveService) HandleAgoraWebhook(ctx context.Context, eventType int, uid uint32) error {
 	// Only handle event 101 (channel create / broadcaster joined)
 	if eventType != 101 {
 		log.Printf("ignoring agora event type %d", eventType)
@@ -261,13 +262,13 @@ func (s *LiveService) HandleAgoraWebhook(ctx context.Context, eventType int) err
 	s.mu.Unlock()
 
 	// Start Media Push to GCP
-	gcpSID, err := s.agoraMediaPush.StartMediaPush(ctx, channelName, gcpRTMPURL)
+	gcpSID, err := s.agoraMediaPush.StartMediaPush(ctx, channelName, uid, gcpRTMPURL)
 	if err != nil {
 		log.Printf("ERROR: media push to GCP failed: %v", err)
 	}
 
 	// Start Media Push to YouTube
-	ytSID, err := s.agoraMediaPush.StartMediaPush(ctx, channelName, ytRTMPURL)
+	ytSID, err := s.agoraMediaPush.StartMediaPush(ctx, channelName, uid, ytRTMPURL)
 	if err != nil {
 		log.Printf("ERROR: media push to YouTube failed: %v", err)
 	}

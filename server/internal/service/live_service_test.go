@@ -20,12 +20,12 @@ type mockAgoraMediaPush struct {
 	stopCount  int
 }
 
-func (m *mockAgoraMediaPush) StartMediaPush(ctx context.Context, channelName string, rtmpURL string) (string, error) {
+func (m *mockAgoraMediaPush) StartMediaPush(ctx context.Context, channelName string, uid uint32, rtmpURL string) (string, error) {
 	m.startCount++
 	return "mock-sid", nil
 }
 
-func (m *mockAgoraMediaPush) StopMediaPush(ctx context.Context, sid string) error {
+func (m *mockAgoraMediaPush) StopMediaPush(ctx context.Context, converterID string) error {
 	m.stopCount++
 	return nil
 }
@@ -191,7 +191,7 @@ func TestHandleWebhook_Event101_MovesToLive(t *testing.T) {
 	svc.session.YouTubeRTMPURL = "rtmp://yt"
 	svc.session.YouTubeBroadcastID = "bc-123"
 
-	err := svc.HandleAgoraWebhook(context.Background(), 101)
+	err := svc.HandleAgoraWebhook(context.Background(), 101, 12345)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -211,7 +211,7 @@ func TestHandleWebhook_Idempotent(t *testing.T) {
 	svc.session.State = model.StateLive
 	svc.session.AgoraChannel = "ch"
 
-	err := svc.HandleAgoraWebhook(context.Background(), 101)
+	err := svc.HandleAgoraWebhook(context.Background(), 101, 12345)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -226,7 +226,7 @@ func TestHandleWebhook_IgnoresOtherEvents(t *testing.T) {
 
 	svc.session.State = model.StateReady
 
-	err := svc.HandleAgoraWebhook(context.Background(), 102)
+	err := svc.HandleAgoraWebhook(context.Background(), 102, 0)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

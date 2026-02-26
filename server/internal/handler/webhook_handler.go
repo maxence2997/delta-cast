@@ -30,6 +30,11 @@ type agoraWebhookPayload struct {
 	Payload   json.RawMessage `json:"payload"`
 }
 
+// agoraWebhookEventPayload extracts the broadcaster UID from the NCS event payload.
+type agoraWebhookEventPayload struct {
+	UID uint32 `json:"uid"`
+}
+
 // HandleAgora handles POST /v1/webhook/agora.
 func (h *WebhookHandler) HandleAgora(c *gin.Context) {
 	body, err := io.ReadAll(c.Request.Body)
@@ -60,7 +65,13 @@ func (h *WebhookHandler) HandleAgora(c *gin.Context) {
 		return
 	}
 
-	if err := h.svc.HandleAgoraWebhook(c.Request.Context(), payload.EventType); err != nil {
+	// Extract broadcaster UID from NCS payload
+	var eventPayload agoraWebhookEventPayload
+	if len(payload.Payload) > 0 {
+		_ = json.Unmarshal(payload.Payload, &eventPayload)
+	}
+
+	if err := h.svc.HandleAgoraWebhook(c.Request.Context(), payload.EventType, eventPayload.UID); err != nil {
 		c.JSON(http.StatusInternalServerError, model.ErrorResponse{
 			Error:   "webhook_failed",
 			Message: err.Error(),

@@ -18,7 +18,10 @@ type Config struct {
 	AgoraAppCertificate string
 	AgoraRESTKey        string
 	AgoraRESTSecret     string
-	AgoraNCSSecret      string
+	AgoraNCSSecret string
+	// AgoraRegion sets the Agora Media Push API region.
+	// Must match the CDN origin location. Values: cn, ap, na, eu.
+	AgoraRegion string
 	// AgoraTranscodingEnabled controls whether Agora Media Push re-encodes the stream
 	// before relaying to RTMP targets. Defaults to false (raw push, no transcoding)
 	// to reduce costs, since both GCP and YouTube can accept the raw RTMP stream.
@@ -46,6 +49,7 @@ func Load() (*Config, error) {
 		AgoraRESTKey:            os.Getenv("AGORA_REST_KEY"),
 		AgoraRESTSecret:         os.Getenv("AGORA_REST_SECRET"),
 		AgoraNCSSecret:          os.Getenv("AGORA_NCS_SECRET"),
+		AgoraRegion:             getEnv("AGORA_REGION", "ap"),
 		AgoraTranscodingEnabled: getEnvBool("AGORA_TRANSCODING_ENABLED", false),
 		GCPProjectID:            os.Getenv("GCP_PROJECT_ID"),
 		GCPRegion:               getEnv("GCP_REGION", "us-central1"),

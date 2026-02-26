@@ -11,11 +11,12 @@ type AgoraTokenProvider interface {
 
 // AgoraMediaPushProvider manages Agora Media Push (RTMP converter) operations.
 type AgoraMediaPushProvider interface {
-	// StartMediaPush starts pushing the channel stream to the given RTMP URL.
-	// Returns the converter/SID identifier for stopping later.
-	StartMediaPush(ctx context.Context, channelName string, rtmpURL string) (string, error)
-	// StopMediaPush stops a previously started media push by SID.
-	StopMediaPush(ctx context.Context, sid string) error
+	// StartMediaPush starts pushing the specified user's stream to the given RTMP URL.
+	// uid is the Agora RTC UID whose stream should be forwarded (required for non-transcoded mode).
+	// Returns the converter ID for stopping later.
+	StartMediaPush(ctx context.Context, channelName string, uid uint32, rtmpURL string) (string, error)
+	// StopMediaPush destroys a converter by its ID.
+	StopMediaPush(ctx context.Context, converterID string) error
 }
 
 // AgoraNCSProvider handles Agora Notification Callback Service signature verification.
