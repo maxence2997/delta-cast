@@ -77,9 +77,9 @@ if [[ "$MODE_VALUE" == "lock" ]]; then
 
   # Step 1：建立 CDN Signed URL Key 以觸發 CDN fill SA 的自動創建
   info "Step 1：初始化 CDN Signed URL Key（觸發 CDN fill SA 建立）..."
-  if gcloud compute backend-buckets describe "$BACKEND_BUCKET" --global \
+  if gcloud compute backend-buckets describe "$BACKEND_BUCKET" \
        --format="value(cdnPolicy.signedUrlKeyNames)" 2>/dev/null | grep -q "$CDN_KEY_NAME"; then
-    warn "CDN Key 已存在，略過建立"
+    info "CDN Key 已存在，略過建立"
   else
     # 產生隨機 16-byte base64url key
     KEY_VALUE=$(python3 -c "import os,base64; print(base64.urlsafe_b64encode(os.urandom(16)).decode().rstrip('='))")
@@ -96,7 +96,7 @@ if [[ "$MODE_VALUE" == "lock" ]]; then
   # Step 2：授予 CDN fill SA 讀取權限
   info "Step 2：授予 CDN fill SA 讀取 bucket 權限..."
   if gsutil iam get "gs://$BUCKET_NAME" 2>/dev/null | grep -q "$CDN_SA"; then
-    warn "CDN SA 已有讀取權限，略過"
+    info "CDN SA 已有讀取權限，略過"
   else
     gsutil iam ch "serviceAccount:${CDN_SA}:objectViewer" "gs://$BUCKET_NAME"
     success "已授予 CDN SA objectViewer"
@@ -108,7 +108,7 @@ if [[ "$MODE_VALUE" == "lock" ]]; then
     gsutil iam ch -d allUsers:objectViewer "gs://$BUCKET_NAME"
     success "已移除 allUsers objectViewer"
   else
-    warn "allUsers 不存在，略過"
+    info "allUsers 不存在，略過"
   fi
 
   echo ""

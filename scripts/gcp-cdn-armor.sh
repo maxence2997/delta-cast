@@ -158,6 +158,7 @@ echo -e "${GREEN}  ✅  Cloud Armor 設定完成（模式：${MODE_VALUE}）${NC
 echo -e "${GREEN}=================================================${NC}"
 echo ""
 info "目前規則："
-gcloud compute security-policies rules list --security-policy="$ARMOR_POLICY"
+gcloud compute security-policies describe "$ARMOR_POLICY" \
+  --format="table(rules.priority,rules.action,rules.description,rules.match.config.srcIpRanges)"
 echo ""
 warn "移除防護：./scripts/gcp-cdn-armor.sh --mode remove"
