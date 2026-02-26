@@ -19,7 +19,7 @@ export default function StreamerPage() {
   const { session, error, loading, prepare, startStream, stopStream } =
     useSession();
 
-  const clientRef = useRef<IAgoraRTCClient | null>(null);
+  const hostClientRef = useRef<IAgoraRTCClient | null>(null);
   const videoTrackRef = useRef<ICameraVideoTrack | null>(null);
   const audioTrackRef = useRef<IMicrophoneAudioTrack | null>(null);
   const videoContainerRef = useRef<HTMLDivElement>(null);
@@ -49,14 +49,13 @@ export default function StreamerPage() {
   const joinAndPublish = useCallback(
     async (appId: string, channel: string, token: string, uid: number) => {
       const AgoraRTC = await getAgoraRTC();
-      const client = AgoraRTC.createClient({ mode: "live", codec: "vp8" });
-      client.setClientRole("host");
-      clientRef.current = client;
+      const hostClient = AgoraRTC.createClient({ mode: "live", codec: "vp8", role: "host" });
+      hostClientRef.current = hostClient;
 
-      await client.join(appId, channel, token, uid);
+      await hostClient.join(appId, channel, token, uid);
 
       if (videoTrackRef.current && audioTrackRef.current) {
-        await client.publish([videoTrackRef.current, audioTrackRef.current]);
+        await hostClient.publish([videoTrackRef.current, audioTrackRef.current]);
       }
       setJoined(true);
     },
@@ -68,7 +67,7 @@ export default function StreamerPage() {
     return () => {
       videoTrackRef.current?.close();
       audioTrackRef.current?.close();
-      clientRef.current?.leave();
+      hostClientRef.current?.leave();
     };
   }, []);
 
@@ -94,10 +93,10 @@ export default function StreamerPage() {
   const handleStop = async () => {
     videoTrackRef.current?.close();
     audioTrackRef.current?.close();
-    await clientRef.current?.leave();
+    await hostClientRef.current?.leave();
     videoTrackRef.current = null;
     audioTrackRef.current = null;
-    clientRef.current = null;
+    hostClientRef.current = null;
     setJoined(false);
     setLocalPreview(false);
     await stopStream();
