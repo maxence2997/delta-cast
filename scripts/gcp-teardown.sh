@@ -22,12 +22,16 @@ BUCKET_NAME="${GCP_BUCKET_NAME:-deltacast-live-output}"
 SA_NAME="deltacast-server"
 SA_EMAIL="${SA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
 
-# Cloud CDN 相關資源名稱（與 phase1-setup.md 一致）
+# Cloud CDN 相關資源名稱（與 gcp-setup.sh 一致）
 FORWARDING_RULE="deltacast-http-rule"
 HTTP_PROXY="deltacast-http-proxy"
 URL_MAP="deltacast-url-map"
 BACKEND_BUCKET="deltacast-backend"
 ARMOR_POLICY="deltacast-armor"
+
+# Cloud DNS
+DNS_ZONE_NAME="${DNS_ZONE_NAME:-asia-east1}"
+DNS_ZONE_DNS_NAME="${DNS_ZONE_DNS_NAME:-cdn.deltacast.example.com.}"
 
 # ── 顏色輸出 ──────────────────────────────────────────────────────────────────
 RED='\033[0;31m'
@@ -182,14 +186,44 @@ done
 
 run gcloud iam service-accounts delete "$SA_EMAIL" --quiet
 
+# ── Step 6：清除 Cloud DNS ────────────────────────────────────────────────────
+echo ""
+info "════ Step 6：清除 Cloud DNS ════"
+
+if gcloud dns managed-zones describe "$DNS_ZONE_NAME" --quiet 2>/dev/null; then
+  DNS_RECORD_NAME="${DNS_ZONE_DNS_NAME%%.}"
+
+  info "刪除 A Record..."
+  run "刪除 A Record ${DNS_RECORD_NAME}." \
+    "gcloud dns record-sets delete '${DNS_RECORD_NAME}.' \
+      --zone='$DNS_ZONE_NAME' --type=A --quiet"
+
+  info "刪除 Managed Zone: $DNS_ZONE_NAME"
+  run "刪除 DNS Zone $DNS_ZONE_NAME" \
+    "gcloud dns managed-zones delete '$DNS_ZONE_NAME' --quiet"
+else
+  skip "DNS Managed Zone $DNS_ZONE_NAME 不存在"
+fi
+
+# ── Step 7：停用 APIs ────────────────────────────────────────────────────────
+echo ""
+info "════ Step 7：停用 GCP APIs ════"
+for api in livestream.googleapis.com storage.googleapis.com compute.googleapis.com dns.googleapis.com; do
+  if gcloud services list --enabled --filter="name:$api" \
+       --format="value(name)" 2>/dev/null | grep -q "$api"; then
+    run "停用 $api" \
+      "gcloud services disable $api --force --quiet"
+  else
+    skip "$api 已停用"
+  fi
+done
+
 echo ""
 echo -e "${GREEN}=================================================${NC}"
 echo -e "${GREEN}  ✅  GCP Teardown 完成${NC}"
 echo -e "${GREEN}=================================================${NC}"
 echo ""
 info "已保留（手動管理）："
-echo "  - Enabled APIs（livestream.googleapis.com 等）"
-echo "  - OAuth 2.0 Credentials（YouTube）"
 echo "  - 本機金鑰檔：~/deltacast-sa-key.json（請手動刪除）"
 echo ""
-warn "若要重新部署，執行 phase1-setup.md 中的 GCP 設定步驟。"
+warn "若要重新部署，執行 ./scripts/gcp-setup.sh 重建所有資源。"

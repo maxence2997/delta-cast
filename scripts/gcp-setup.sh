@@ -34,6 +34,11 @@ URL_MAP="deltacast-url-map"
 HTTP_PROXY="deltacast-http-proxy"
 FORWARDING_RULE="deltacast-http-rule"
 
+# Cloud DNS
+DNS_ZONE_NAME="${DNS_ZONE_NAME:-asia-east1}"
+DNS_ZONE_DNS_NAME="${DNS_ZONE_DNS_NAME:-cdn.deltacast.example.com.}"
+DNS_RECORD_TTL="${DNS_RECORD_TTL:-300}"
+
 # ── 顏色輸出 ──────────────────────────────────────────────────────────────────
 RED='\033[0;31m'
 YELLOW='\033[1;33m'
@@ -61,7 +66,7 @@ gcloud config set project "$PROJECT_ID" --quiet
 
 # ── Step 1：啟用 APIs ────────────────────────────────────────────────────────
 info "════ Step 1：啟用 Required APIs ════"
-for api in livestream.googleapis.com storage.googleapis.com compute.googleapis.com; do
+for api in livestream.googleapis.com storage.googleapis.com compute.googleapis.com dns.googleapis.com; do
   if gcloud services list --enabled --filter="name:$api" --format="value(name)" 2>/dev/null | grep -q "$api"; then
     skip "$api 已啟用"
   else
@@ -186,6 +191,50 @@ else
   success "SA 金鑰已下載至：$SA_KEY_PATH"
 fi
 
+# ── Step 6：設定 Cloud DNS ───────────────────────────────────────────────────
+echo ""
+info "════ Step 6：設定 Cloud DNS ════"
+
+# Managed Zone
+if gcloud dns managed-zones describe "$DNS_ZONE_NAME" --quiet 2>/dev/null; then
+  skip "DNS Managed Zone $DNS_ZONE_NAME 已存在"
+else
+  gcloud dns managed-zones create "$DNS_ZONE_NAME" \
+    --dns-name="$DNS_ZONE_DNS_NAME" \
+    --description="DeltaCast CDN domain" \
+    --quiet
+  success "DNS Managed Zone 建立完成：$DNS_ZONE_NAME ($DNS_ZONE_DNS_NAME)"
+fi
+
+# A Record → CDN IP（CDN_IP 已在 Step 3 取得）
+DNS_RECORD_NAME="${DNS_ZONE_DNS_NAME%%.}"  # 去掉尾部的點
+EXISTING_A=$(gcloud dns record-sets describe "${DNS_RECORD_NAME}." \
+  --zone="$DNS_ZONE_NAME" --type=A --format="value(rrdatas[0])" 2>/dev/null || true)
+
+if [[ "$EXISTING_A" == "$CDN_IP" ]]; then
+  skip "A Record 已指向正確 IP：$CDN_IP"
+elif [[ -n "$EXISTING_A" ]]; then
+  info "更新 A Record：$EXISTING_A → $CDN_IP"
+  gcloud dns record-sets update "${DNS_RECORD_NAME}." \
+    --zone="$DNS_ZONE_NAME" \
+    --type=A \
+    --ttl="$DNS_RECORD_TTL" \
+    --rrdatas="$CDN_IP" \
+    --quiet
+  success "A Record 已更新：${DNS_RECORD_NAME}. → $CDN_IP"
+else
+  gcloud dns record-sets create "${DNS_RECORD_NAME}." \
+    --zone="$DNS_ZONE_NAME" \
+    --type=A \
+    --ttl="$DNS_RECORD_TTL" \
+    --rrdatas="$CDN_IP" \
+    --quiet
+  success "A Record 建立完成：${DNS_RECORD_NAME}. → $CDN_IP"
+fi
+
+NS_RECORDS=$(gcloud dns record-sets describe "${DNS_RECORD_NAME}." \
+  --zone="$DNS_ZONE_NAME" --type=NS --format="value(rrdatas)" 2>/dev/null || true)
+
 # ── 完成摘要 ──────────────────────────────────────────────────────────────────
 echo ""
 echo -e "${GREEN}=====================================================${NC}"
@@ -197,15 +246,19 @@ echo ""
 echo "  GCP_PROJECT_ID=$PROJECT_ID"
 echo "  GCP_REGION=$REGION"
 echo "  GCP_BUCKET_NAME=$BUCKET_NAME"
-echo "  GCP_CDN_DOMAIN=<YOUR_DOMAIN_OR_IP>"
+echo "  GCP_CDN_DOMAIN=${DNS_RECORD_NAME}"
 echo ""
 echo -e "${CYAN}Cloud CDN IP：${NC}${CDN_IP}"
+echo -e "${CYAN}CDN Domain  ：${NC}${DNS_RECORD_NAME}"
 echo ""
-echo "  → 若使用 IP 直接：GCP_CDN_DOMAIN=$CDN_IP"
-echo "  → 若綁定域名：在 DNS 設定 A Record 指向 $CDN_IP"
-echo ""
+if [[ -n "${NS_RECORDS:-}" ]]; then
+  echo -e "${YELLOW}DNS NS Records（請在您的網域商設定，委派給 GCP DNS）：${NC}"
+  echo "  $NS_RECORDS" | tr ',' '\n' | sed 's/^ */  /'
+  echo ""
+fi
 echo "系統環境變數（加入 ~/.zshrc 或 ~/.bashrc）："
 echo "  export GOOGLE_APPLICATION_CREDENTIALS=$SA_KEY_PATH"
 echo ""
 warn "⚠️  $SA_KEY_PATH 是敏感檔案，勿加入版本控制。"
 warn "⚠️  CDN IP 可能需要幾分鐘才能生效。"
+warn "⚠️  若使用自訂域名，請確認 NS Record 已委派給 GCP Cloud DNS。"
