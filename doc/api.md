@@ -202,7 +202,17 @@ stateDiagram-v2
 }
 ```
 
-> `gcpPlaybackUrl` 與 `youtubeWatchUrl` 在 `idle` / `preparing` 狀態下為空字串，`ready` 之後才會填入。
+**各狀態下欄位可用性**：
+
+| 狀態 | `gcpPlaybackUrl` | `youtubeWatchUrl` | 有實際內容？ |
+|------|-----------------|-------------------|-------------|
+| `idle` | 空字串 | 空字串 | 否 |
+| `preparing` | 空字串 | 空字串 | 否 |
+| `ready` | ✓ 已填入 | ✓ 已填入 | 否（資源就緒但尚未推流）|
+| `live` | ✓ 已填入 | ✓ 已填入 | **是** |
+| `stopping` | ✓ 已填入 | ✓ 已填入 | 停止中 |
+
+> 收播端只需輪詢此端點，在 `state === "live"` 時取用兩條 URL 即可。因為 POC 單一 Session，不需要額外的房間選擇邏輯。
 
 ---
 
@@ -375,6 +385,42 @@ sequenceDiagram
     Note over GCP: RTMP → 轉碼 → HLS → GCS → Cloud CDN
     Note over YT: YouTube 直播開始播放
 ```
+
+### 收播端流程
+
+```mermaid
+sequenceDiagram
+    actor Audience as 收播端
+    participant API as DeltaCast API
+    participant CDN as Cloud CDN (HLS)
+    participant YT as YouTube
+
+    Note over Audience: 頁面載入後開始輪詢
+    loop 每 2 秒，直到 state = "live"
+        Audience->>API: GET /v1/live/status (JWT)
+        API-->>Audience: { state, gcpPlaybackUrl, youtubeWatchUrl }
+    end
+
+    Note over Audience: state = "live" → 取用播放 URL
+
+    Audience->>CDN: HLS 播放（gcpPlaybackUrl → *.m3u8）
+    CDN-->>Audience: HLS segments（延遲約 10-30 秒）
+
+    Audience->>YT: YouTube 嵌入播放（youtubeWatchUrl）
+    YT-->>Audience: YouTube 串流（延遲約 5-10 秒）
+
+    loop 持續輪詢偵測關播
+        Audience->>API: GET /v1/live/status (JWT)
+        API-->>Audience: { state: "idle" }
+    end
+    Note over Audience: state = "idle" → 顯示「無直播」
+```
+
+> **收播端設計重點**：
+> - 不需要呼叫 `prepare` / `start` / `stop`，只需 `GET /v1/live/status`
+> - JWT Token 與推流端共用同一組（POC 無使用者系統）
+> - `gcpPlaybackUrl` 回傳完整 `.m3u8` URL，直接餵給 HLS 播放器（video.js）
+> - `youtubeWatchUrl` 格式為 `https://www.youtube.com/watch?v={broadcastId}`，可直接給 YouTube 播放器元件
 
 ### 關播流程
 
