@@ -179,13 +179,15 @@ Webhook 端點不需要 JWT，改用 **Agora HMAC/SHA1 簽章驗證**（`Agora-S
 
 **各狀態下欄位可用性**：
 
-| 狀態        | `gcpPlaybackUrl` | `youtubeWatchUrl` | 有實際內容？             |
-| ----------- | ---------------- | ----------------- | ------------------------ |
-| `idle`      | 空字串           | 空字串            | 否                       |
-| `preparing` | 空字串           | 空字串            | 否                       |
-| `ready`     | ✓ 已填入         | ✓ 已填入          | 否（資源就緒但尚未推流） |
-| `live`      | ✓ 已填入         | ✓ 已填入          | **是**                   |
-| `stopping`  | ✓ 已填入         | ✓ 已填入          | 停止中                   |
+| 狀態        | `gcpPlaybackUrl`  | `youtubeWatchUrl` | 有實際內容？             |
+| ----------- | ----------------- | ----------------- | ------------------------ |
+| `idle`      | 省略（omitempty） | 省略（omitempty） | 否                       |
+| `preparing` | 省略（omitempty） | 省略（omitempty） | 否                       |
+| `ready`     | ✓ 已填入          | ✓ 已填入          | 否（資源就緒但尚未推流） |
+| `live`      | ✓ 已填入          | ✓ 已填入          | **是**                   |
+| `stopping`  | ✓ 已填入          | ✓ 已填入          | 停止中                   |
+
+> 兩個 URL 欄位使用 `omitempty`，在 `idle` / `preparing` 狀態下不會出現在回應中，前端應以 optional（`?`）型別處理。
 
 > 收播端只需輪詢此端點，在 `state === "live"` 時取用兩條 URL 即可。因為 POC 單一 Session，不需要額外的房間選擇邏輯。
 

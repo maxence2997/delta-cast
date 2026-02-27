@@ -144,13 +144,7 @@ sequenceDiagram
 
 收播端不需要呼叫 `prepare` / `start` / `stop`，只需輪詢 `GET /v1/live/status`。因為 POC 是單一 Session，不需要房間選擇邏輯。
 
-`gcpPlaybackUrl` 與 `youtubeWatchUrl` 從 `ready` 狀態起即填入，但只有 `live` 狀態才有實際串流內容：
-
-| 狀態                 | URL 是否填入 | 有實際內容             |
-| -------------------- | ------------ | ---------------------- |
-| `idle` / `preparing` | 空字串       | 否                     |
-| `ready`              | ✓            | 否（資源就緒但未推流） |
-| `live`               | ✓            | **是**                 |
+`gcpPlaybackUrl` 與 `youtubeWatchUrl` 從 `ready` 狀態起即填入，但只有 `live` 狀態才有實際串流內容。各狀態下的欄位可用性詳見 [`doc/api.md`](api.md) 的 `GET /v1/live/status` 章節。
 
 ```mermaid
 sequenceDiagram
