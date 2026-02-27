@@ -22,6 +22,7 @@ export function useSession() {
 
   const stopPolling = useCallback(() => {
     if (pollRef.current) {
+      console.log("[Session] polling stopped");
       clearInterval(pollRef.current);
       pollRef.current = null;
     }
@@ -39,9 +40,11 @@ export function useSession() {
 
   const startPolling = useCallback(() => {
     stopPolling();
+    console.log("[Session] polling started");
     pollRef.current = setInterval(async () => {
       try {
         const status = await api.getStatus();
+        console.log(`[Poll] state=${status.state}`, status);
         setSession({
           sessionId: status.sessionId,
           state: status.state as SessionState,
@@ -50,6 +53,7 @@ export function useSession() {
         });
         // Stop polling once we reach a stable state
         if (status.state === "idle") {
+          console.log("[Session] reached idle, stopping poll");
           stopPolling();
           setSession(null);
         }
@@ -64,10 +68,12 @@ export function useSession() {
   }, [stopPolling]);
 
   const prepare = useCallback(async () => {
+    console.log("[Session] prepare()");
     setError(null);
     setLoading(true);
     try {
       const res = await api.prepare();
+      console.log("[Session] prepare response:", res);
       setSession({
         sessionId: res.sessionId,
         state: res.state as SessionState,
@@ -76,6 +82,7 @@ export function useSession() {
       });
       startPolling();
     } catch (e) {
+      console.error("[Session] prepare failed:", e);
       setError((e as Error).message);
     } finally {
       setLoading(false);
@@ -83,16 +90,19 @@ export function useSession() {
   }, [startPolling]);
 
   const startStream = useCallback(async () => {
+    console.log("[Session] startStream()");
     setError(null);
     setLoading(true);
     try {
       const res = await api.start();
+      console.log("[Session] startStream response:", res);
       // Do NOT optimistically set state to "live" here.
       // start() only issues an Agora token; session state stays "ready".
       // State transitions to "live" only after Agora fires NCS eventType=103
       // to the backend webhook, which polling will then pick up.
       return res;
     } catch (e) {
+      console.error("[Session] startStream failed:", e);
       setError((e as Error).message);
       return null;
     } finally {
@@ -101,6 +111,7 @@ export function useSession() {
   }, []);
 
   const stopStream = useCallback(async () => {
+    console.log("[Session] stopStream()");
     setError(null);
     setLoading(true);
     try {
@@ -108,7 +119,26 @@ export function useSession() {
       stopPolling();
       setSession(null);
     } catch (e) {
+      console.error("[Session] stopStream failed:", e);
       setError((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }, [stopPolling]);
+
+  /** Cancel an in-progress prepare: stop polling and call stop API. */
+  const cancelPrepare = useCallback(async () => {
+    console.log("[Session] cancelPrepare()");
+    stopPolling();
+    setError(null);
+    setLoading(true);
+    try {
+      await api.stop();
+      setSession(null);
+    } catch (e) {
+      console.warn("[Session] cancelPrepare stop error (ignored):", e);
+      // Ignore errors — session may not have been fully created yet
+      setSession(null);
     } finally {
       setLoading(false);
     }
@@ -139,6 +169,7 @@ export function useSession() {
     prepare,
     startStream,
     stopStream,
+    cancelPrepare,
     refreshStatus,
     startPolling,
     stopPolling,

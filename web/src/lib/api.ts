@@ -38,6 +38,9 @@ export function clearToken() {
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const method = options.method ?? "GET";
+  console.log(`[API] ${method} ${path}`);
+
   const token = getToken();
   if (!token) {
     throw new ApiError("missing JWT token", httpStatusUnauthorized);
@@ -53,9 +56,12 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new ApiError(body.message ?? `API error ${res.status}`, res.status);
+    const errMsg = body.message ?? `API error ${res.status}`;
+    console.warn(`[API] ${method} ${path} → ${res.status} ERROR: ${errMsg}`);
+    throw new ApiError(errMsg, res.status);
   }
 
+  console.log(`[API] ${method} ${path} → ${res.status}`);
   return res.json() as Promise<T>;
 }
 
