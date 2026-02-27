@@ -1,5 +1,15 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
+export class ApiError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
 /** Stored JWT token for API authentication. */
 let jwtToken: string | null = null;
 
@@ -29,23 +39,27 @@ export function clearToken() {
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getToken();
+  if (!token) {
+    throw new ApiError("missing JWT token", httpStatusUnauthorized);
+  }
+
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     ...((options.headers as Record<string, string>) ?? {}),
   };
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`;
-  }
+  headers["Authorization"] = `Bearer ${token}`;
 
   const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.message ?? `API error ${res.status}`);
+    throw new ApiError(body.message ?? `API error ${res.status}`, res.status);
   }
 
   return res.json() as Promise<T>;
 }
+
+const httpStatusUnauthorized = 401;
 
 // ---- API Types (mirrors server/internal/model/api.go) ----
 

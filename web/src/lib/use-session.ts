@@ -27,6 +27,16 @@ export function useSession() {
     }
   }, []);
 
+  const handlePollingError = useCallback(
+    (err: unknown) => {
+      if (err instanceof api.ApiError && err.status === 401) {
+        setError(err.message);
+        stopPolling();
+      }
+    },
+    [stopPolling],
+  );
+
   const startPolling = useCallback(() => {
     stopPolling();
     pollRef.current = setInterval(async () => {
@@ -43,11 +53,11 @@ export function useSession() {
           stopPolling();
           setSession(null);
         }
-      } catch {
-        // Silently ignore polling errors
+      } catch (error) {
+        handlePollingError(error);
       }
     }, 2000);
-  }, [stopPolling]);
+  }, [handlePollingError, stopPolling]);
 
   useEffect(() => {
     return () => stopPolling();
@@ -77,14 +87,10 @@ export function useSession() {
     setLoading(true);
     try {
       const res = await api.start();
-      setSession((prev) =>
-        prev
-          ? { ...prev, state: "live" }
-          : {
-              sessionId: res.sessionId,
-              state: "live",
-            },
-      );
+      // Do NOT optimistically set state to "live" here.
+      // start() only issues an Agora token; session state stays "ready".
+      // State transitions to "live" only after Agora fires NCS eventType=103
+      // to the backend webhook, which polling will then pick up.
       return res;
     } catch (e) {
       setError((e as Error).message);
@@ -121,10 +127,10 @@ export function useSession() {
           youtubeWatchUrl: status.youtubeWatchUrl,
         });
       }
-    } catch {
-      // ignore
+    } catch (error) {
+      handlePollingError(error);
     }
-  }, []);
+  }, [handlePollingError]);
 
   return {
     session,

@@ -49,13 +49,20 @@ export default function StreamerPage() {
   const joinAndPublish = useCallback(
     async (appId: string, channel: string, token: string, uid: number) => {
       const AgoraRTC = await getAgoraRTC();
-      const hostClient = AgoraRTC.createClient({ mode: "live", codec: "vp8", role: "host" });
+      const hostClient = AgoraRTC.createClient({
+        mode: "live",
+        codec: "h264",
+        role: "host",
+      });
       hostClientRef.current = hostClient;
 
       await hostClient.join(appId, channel, token, uid);
 
       if (videoTrackRef.current && audioTrackRef.current) {
-        await hostClient.publish([videoTrackRef.current, audioTrackRef.current]);
+        await hostClient.publish([
+          videoTrackRef.current,
+          audioTrackRef.current,
+        ]);
       }
       setJoined(true);
     },
