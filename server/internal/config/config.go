@@ -4,6 +4,8 @@ package config
 import (
 	"fmt"
 	"os"
+	"strings"
+	"time"
 )
 
 // Config holds all configuration values for the application.
@@ -40,6 +42,21 @@ type Config struct {
 	YouTubeClientID     string
 	YouTubeClientSecret string
 	YouTubeRefreshToken string
+
+	// CORS
+	// CORSOrigins is the list of allowed origins for CORS requests.
+	// Defaults to localhost:3000 and localhost:3001 for local development.
+	CORSOrigins []string
+	// CORSMethods is the list of allowed HTTP methods.
+	CORSMethods []string
+	// CORSHeaders is the list of allowed request headers.
+	CORSHeaders []string
+	// CORSExposeHeaders is the list of headers exposed to the browser.
+	CORSExposeHeaders []string
+	// CORSAllowCredentials controls whether credentials (cookies, auth headers) are allowed.
+	CORSAllowCredentials bool
+	// CORSMaxAge is the duration that preflight responses are cached.
+	CORSMaxAge time.Duration
 }
 
 // Load reads configuration from environment variables and validates required fields.
@@ -62,6 +79,12 @@ func Load() (*Config, error) {
 		YouTubeClientID:         os.Getenv("YOUTUBE_CLIENT_ID"),
 		YouTubeClientSecret:     os.Getenv("YOUTUBE_CLIENT_SECRET"),
 		YouTubeRefreshToken:     os.Getenv("YOUTUBE_REFRESH_TOKEN"),
+		CORSOrigins:             getEnvStringSlice("CORS_ORIGINS", []string{"http://localhost:3000", "http://localhost:3001"}),
+		CORSMethods:             getEnvStringSlice("CORS_METHODS", []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}),
+		CORSHeaders:             getEnvStringSlice("CORS_HEADERS", []string{"Origin", "Content-Type", "Authorization"}),
+		CORSExposeHeaders:       getEnvStringSlice("CORS_EXPOSE_HEADERS", []string{"Content-Length"}),
+		CORSAllowCredentials:    getEnvBool("CORS_ALLOW_CREDENTIALS", true),
+		CORSMaxAge:              getEnvDurationHours("CORS_MAX_AGE_HOURS", 12*time.Hour),
 	}
 
 	if err := cfg.validate(); err != nil {
@@ -100,6 +123,33 @@ func getEnv(key, fallback string) string {
 		return val
 	}
 	return fallback
+}
+
+func getEnvDurationHours(key string, fallback time.Duration) time.Duration {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	hours, err := time.ParseDuration(v + "h")
+	if err != nil {
+		return fallback
+	}
+	return hours
+}
+
+func getEnvStringSlice(key string, fallback []string) []string {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	parts := strings.Split(v, ",")
+	result := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if trimmed := strings.TrimSpace(p); trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+	return result
 }
 
 func getEnvBool(key string, fallback bool) bool {

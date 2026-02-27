@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/maxence2997/delta-cast/server/internal/config"
 	"github.com/maxence2997/delta-cast/server/internal/handler"
@@ -35,6 +36,14 @@ func main() {
 
 	// Router
 	r := gin.Default()
+	r.Use(cors.New(cors.Config{
+		AllowOrigins:     cfg.CORSOrigins,
+		AllowMethods:     cfg.CORSMethods,
+		AllowHeaders:     cfg.CORSHeaders,
+		ExposeHeaders:    cfg.CORSExposeHeaders,
+		AllowCredentials: cfg.CORSAllowCredentials,
+		MaxAge:           cfg.CORSMaxAge,
+	}))
 	r.Use(middleware.Logger())
 
 	r.GET("/health", func(c *gin.Context) {
