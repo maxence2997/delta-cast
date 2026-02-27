@@ -88,31 +88,31 @@ clean-all: ## Remove build artifacts + Go caches
 # ----------------------------------------
 
 gcp-status: ## Check GCP resource status (ready for test?)
-	@chmod +x scripts/gcp-status.sh
-	@./scripts/gcp-status.sh
+	@chmod +x script/gcp-status.sh
+	@./script/gcp-status.sh
 
 gcp-open: ## Open CDN for testing: allowlist your IP + unlock GCS bucket
-	@chmod +x scripts/gcp-cdn-armor.sh scripts/gcp-storage-secure.sh
+	@chmod +x script/gcp-cdn-armor.sh script/gcp-storage-secure.sh
 	@echo "\n\033[36m── Step 1/2: CDN → allowlist your IP ──\033[0m"
-	@./scripts/gcp-cdn-armor.sh --mode allowlist
+	@./script/gcp-cdn-armor.sh --mode allowlist
 	@echo "\n\033[36m── Step 2/2: GCS → unlock public read ──\033[0m"
-	@./scripts/gcp-storage-secure.sh --mode unlock
+	@./script/gcp-storage-secure.sh --mode unlock
 	@echo "\n\033[32m✅  Resources open for testing. Run 'make gcp-status' to verify.\033[0m\n"
 
 gcp-open-public: ## Open CDN to everyone (allow-all) + unlock GCS bucket
-	@chmod +x scripts/gcp-cdn-armor.sh scripts/gcp-storage-secure.sh
+	@chmod +x script/gcp-cdn-armor.sh script/gcp-storage-secure.sh
 	@echo "\n\033[36m── Step 1/2: CDN → allow all traffic ──\033[0m"
-	@./scripts/gcp-cdn-armor.sh --mode allow-all
+	@./script/gcp-cdn-armor.sh --mode allow-all
 	@echo "\n\033[36m── Step 2/2: GCS → unlock public read ──\033[0m"
-	@./scripts/gcp-storage-secure.sh --mode unlock
+	@./script/gcp-storage-secure.sh --mode unlock
 	@echo "\n\033[32m✅  Resources fully open. Run 'make gcp-status' to verify.\033[0m\n"
 
 gcp-close: ## Close CDN after testing: deny-all + lock GCS bucket
-	@chmod +x scripts/gcp-cdn-armor.sh scripts/gcp-storage-secure.sh
+	@chmod +x script/gcp-cdn-armor.sh script/gcp-storage-secure.sh
 	@echo "\n\033[36m── Step 1/2: CDN → deny all traffic ──\033[0m"
-	@./scripts/gcp-cdn-armor.sh --mode deny-all
+	@./script/gcp-cdn-armor.sh --mode deny-all
 	@echo "\n\033[36m── Step 2/2: GCS → lock direct access ──\033[0m"
-	@./scripts/gcp-storage-secure.sh --mode lock
+	@./script/gcp-storage-secure.sh --mode lock
 	@echo "\n\033[32m✅  Resources closed. Run 'make gcp-status' to verify.\033[0m\n"
 
 # ----------------------------------------
@@ -120,16 +120,16 @@ gcp-close: ## Close CDN after testing: deny-all + lock GCS bucket
 # ----------------------------------------
 
 yt-status: ## Show YouTube API status + all Broadcasts privacy state
-	@chmod +x scripts/youtube-secure.sh
-	@./scripts/youtube-secure.sh --mode status
+	@chmod +x script/youtube-secure.sh
+	@./script/youtube-secure.sh --mode status
 
 yt-open: ## Unlock YouTube for testing: set Broadcasts to unlisted
-	@chmod +x scripts/youtube-secure.sh
-	@./scripts/youtube-secure.sh --mode unlock
+	@chmod +x script/youtube-secure.sh
+	@./script/youtube-secure.sh --mode unlock
 
 yt-close: ## Lock YouTube after testing: set Broadcasts to private
-	@chmod +x scripts/youtube-secure.sh
-	@./scripts/youtube-secure.sh --mode lock
+	@chmod +x script/youtube-secure.sh
+	@./script/youtube-secure.sh --mode lock
 
 # ----------------------------------------
 # Test Session Control (GCP + YouTube)

@@ -4,7 +4,7 @@
 
 完成後取得：`GCP_PROJECT_ID`、`GCP_REGION`、`GCP_BUCKET_NAME`、`GCP_CDN_DOMAIN`
 
-自動化腳本：`scripts/gcp-setup.sh`（建立）、`scripts/gcp-teardown.sh`（清除）
+自動化腳本：`script/gcp-setup.sh`（建立）、`script/gcp-teardown.sh`（清除）
 
 ---
 
@@ -155,11 +155,11 @@ curl -I http://<GCP_CDN_DOMAIN>/
 
 ```bash
 # 建立全部靜態資源
-./scripts/gcp-setup.sh
+./script/gcp-setup.sh
 
 # 清除全部靜態資源
-./scripts/gcp-teardown.sh
+./script/gcp-teardown.sh
 
 # CDN 防護（IP 白名單 / 速率限制）
-./scripts/gcp-cdn-armor.sh --mode allowlist
+./script/gcp-cdn-armor.sh --mode allowlist
 ```

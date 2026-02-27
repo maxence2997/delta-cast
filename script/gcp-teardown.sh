@@ -6,11 +6,11 @@
 # 執行前確認 PROJECT_ID / REGION / BUCKET_NAME 與實際設定一致。
 #
 # 執行方式：
-#   chmod +x scripts/gcp-teardown.sh
-#   ./scripts/gcp-teardown.sh
+#   chmod +x script/gcp-teardown.sh
+#   ./script/gcp-teardown.sh
 #
 # 若要跳過確認提示（CI 環境）：
-#   SKIP_CONFIRM=1 ./scripts/gcp-teardown.sh
+#   SKIP_CONFIRM=1 ./script/gcp-teardown.sh
 # =============================================================================
 
 set -euo pipefail
@@ -30,7 +30,7 @@ MISSING=()
 [ -z "${GCP_BUCKET_NAME:-}" ] && MISSING+=("GCP_BUCKET_NAME")
 if [ ${#MISSING[@]} -gt 0 ]; then
   echo "Error: missing required env vars: ${MISSING[*]}" >&2
-  echo "Copy scripts/.env.example to scripts/.env and fill in values." >&2
+  echo "Copy script/.env.example to script/.env and fill in values." >&2
   exit 1
 fi
 
@@ -245,4 +245,4 @@ echo ""
 info "已保留（手動管理）："
 echo "  - 本機金鑰檔：~/deltacast-sa-key.json（請手動刪除）"
 echo ""
-warn "若要重新部署，執行 ./scripts/gcp-setup.sh 重建所有資源。"
+warn "若要重新部署，執行 ./script/gcp-setup.sh 重建所有資源。"

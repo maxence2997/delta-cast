@@ -16,16 +16,16 @@
 #     它只是用來觸發 CDN SA 的創建。
 #
 # 使用方式：
-#   chmod +x scripts/gcp-storage-secure.sh
+#   chmod +x script/gcp-storage-secure.sh
 #
 #   # 鎖定：移除公開讀取，只允許 CDN 存取（測試前執行）
-#   ./scripts/gcp-storage-secure.sh --mode lock
+#   ./script/gcp-storage-secure.sh --mode lock
 #
 #   # 解鎖：恢復 allUsers 公開讀取（臨時偵錯用）
-#   ./scripts/gcp-storage-secure.sh --mode unlock
+#   ./script/gcp-storage-secure.sh --mode unlock
 #
 #   # 查看目前 bucket IAM 狀態
-#   ./scripts/gcp-storage-secure.sh --mode status
+#   ./script/gcp-storage-secure.sh --mode status
 # =============================================================================
 
 set -euo pipefail
@@ -45,7 +45,7 @@ MISSING=()
 [ -z "${GCP_BUCKET_NAME:-}" ] && MISSING+=("GCP_BUCKET_NAME")
 if [ ${#MISSING[@]} -gt 0 ]; then
   echo "Error: missing required env vars: ${MISSING[*]}" >&2
-  echo "Copy scripts/.env.example to scripts/.env and fill in values." >&2
+  echo "Copy script/.env.example to script/.env and fill in values." >&2
   exit 1
 fi
 
@@ -148,7 +148,7 @@ if [[ "$MODE_VALUE" == "lock" ]]; then
   echo "  ✅  透過 Cloud CDN 存取 → 正常（CDN SA 有讀取權限）"
   echo ""
   warn "⚠️  CDN 有快取，鎖定前已快取的內容仍可短暫存取。"
-  warn "解鎖：./scripts/gcp-storage-secure.sh --mode unlock"
+  warn "解鎖：./script/gcp-storage-secure.sh --mode unlock"
 
 elif [[ "$MODE_VALUE" == "unlock" ]]; then
   echo ""
@@ -170,7 +170,7 @@ elif [[ "$MODE_VALUE" == "unlock" ]]; then
   echo -e "${YELLOW}  🔓  Bucket 已解鎖（偵錯模式）${NC}"
   echo -e "${YELLOW}=====================================================${NC}"
   echo ""
-  warn "偵錯完成後記得重新鎖定：./scripts/gcp-storage-secure.sh --mode lock"
+  warn "偵錯完成後記得重新鎖定：./script/gcp-storage-secure.sh --mode lock"
 else
   echo "未知模式：$MODE_VALUE"
   echo "用法: ./gcp-storage-secure.sh --mode [lock|unlock|status]"

@@ -18,7 +18,7 @@ MISSING=()
 [ -z "${GCP_BUCKET_NAME:-}" ] && MISSING+=("GCP_BUCKET_NAME")
 if [ ${#MISSING[@]} -gt 0 ]; then
   echo "Error: missing required env vars: ${MISSING[*]}" >&2
-  echo "Copy scripts/.env.example to scripts/.env and fill in values." >&2
+  echo "Copy script/.env.example to script/.env and fill in values." >&2
   exit 1
 fi
 
@@ -164,7 +164,7 @@ fi
 if [[ -f "${SA_KEY_PATH}" ]]; then
   ok "SA key file exists: ${SA_KEY_PATH}"
 else
-  fail_ "SA key file missing: ${SA_KEY_PATH} (re-run scripts/gcp-setup.sh)"
+  fail_ "SA key file missing: ${SA_KEY_PATH} (re-run script/gcp-setup.sh)"
 fi
 
 if [[ -n "${GOOGLE_APPLICATION_CREDENTIALS:-}" ]]; then

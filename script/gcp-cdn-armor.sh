@@ -8,20 +8,20 @@
 #   3. 可選：地區封鎖（封鎖非預期地區的請求）
 #
 # 使用方式：
-#   chmod +x scripts/gcp-cdn-armor.sh
+#   chmod +x script/gcp-cdn-armor.sh
 #
 #   # 模式 A：IP 白名單（只有自己能看，自動偵測目前 IP）
-#   ./scripts/gcp-cdn-armor.sh --mode allowlist
-#   ALLOW_IPS="1.2.3.4/32,5.6.7.8/32" ./scripts/gcp-cdn-armor.sh --mode allowlist
+#   ./script/gcp-cdn-armor.sh --mode allowlist
+#   ALLOW_IPS="1.2.3.4/32,5.6.7.8/32" ./script/gcp-cdn-armor.sh --mode allowlist
 #
 #   # 模式 B：完全開放（公開測試，保留 policy 可快速切回）
-#   ./scripts/gcp-cdn-armor.sh --mode allow-all
+#   ./script/gcp-cdn-armor.sh --mode allow-all
 #
 #   # 模式 C：完全封鎖（非測試期間使用，所有請求一律 403）
-#   ./scripts/gcp-cdn-armor.sh --mode deny-all
+#   ./script/gcp-cdn-armor.sh --mode deny-all
 #
 #   # 移除防護規則（刪除 policy）
-#   ./scripts/gcp-cdn-armor.sh --mode remove
+#   ./script/gcp-cdn-armor.sh --mode remove
 # =============================================================================
 # ⚠️  注意：此腳本針對 Cloud CDN Backend Bucket 使用 CLOUD_ARMOR_EDGE 類型。
 #    Edge Policy 限制：
@@ -44,7 +44,7 @@ fi
 # ── 必填變數檢查 ──────────────────────────────────────────────────────────────
 if [ -z "${GCP_PROJECT_ID:-}" ]; then
   echo "Error: GCP_PROJECT_ID is not set." >&2
-  echo "Copy scripts/.env.example to scripts/.env and fill in values." >&2
+  echo "Copy script/.env.example to script/.env and fill in values." >&2
   exit 1
 fi
 
@@ -195,4 +195,4 @@ info "目前規則："
 gcloud compute security-policies describe "$ARMOR_POLICY" \
   --format="table(rules.priority,rules.action,rules.description,rules.match.config.srcIpRanges)"
 echo ""
-warn "移除防護：./scripts/gcp-cdn-armor.sh --mode remove"
+warn "移除防護：./script/gcp-cdn-armor.sh --mode remove"

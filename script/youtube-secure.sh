@@ -24,12 +24,12 @@
 #   YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET, YOUTUBE_REFRESH_TOKEN
 #
 # 使用方式：
-#   chmod +x scripts/youtube-secure.sh
-#   ./scripts/youtube-secure.sh --mode status
-#   ./scripts/youtube-secure.sh --mode lock
-#   ./scripts/youtube-secure.sh --mode unlock
-#   ./scripts/youtube-secure.sh --mode disable-api
-#   ./scripts/youtube-secure.sh --mode enable-api
+#   chmod +x script/youtube-secure.sh
+#   ./script/youtube-secure.sh --mode status
+#   ./script/youtube-secure.sh --mode lock
+#   ./script/youtube-secure.sh --mode unlock
+#   ./script/youtube-secure.sh --mode disable-api
+#   ./script/youtube-secure.sh --mode enable-api
 # =============================================================================
 
 set -euo pipefail
@@ -46,7 +46,7 @@ fi
 # ── 必填變數檢查 ──────────────────────────────────────────────────────────────
 if [ -z "${GCP_PROJECT_ID:-}" ]; then
   echo "Error: GCP_PROJECT_ID is not set." >&2
-  echo "Copy scripts/.env.example to scripts/.env and fill in values." >&2
+  echo "Copy script/.env.example to script/.env and fill in values." >&2
   exit 1
 fi
 
@@ -88,7 +88,7 @@ if [[ "$MODE_VALUE" == "disable-api" ]]; then
   fi
   echo ""
   warn "DeltaCast server 的 /prepare 端點將無法建立 YouTube 資源。"
-  warn "重新啟用：./scripts/youtube-secure.sh --mode enable-api"
+  warn "重新啟用：./script/youtube-secure.sh --mode enable-api"
   exit 0
 fi
 
@@ -236,7 +236,7 @@ for item in data.get('items', []):
   echo ""
   echo "  ❌  YouTube Watch URL → 觀眾無法觀看（需登入且已分享才可見）"
   echo ""
-  warn "解鎖：./scripts/youtube-secure.sh --mode unlock"
+  warn "解鎖：./script/youtube-secure.sh --mode unlock"
   exit 0
 fi
 
@@ -290,7 +290,7 @@ for item in data.get('items', []):
   echo -e "${YELLOW}  🔓  YouTube Broadcasts 已解鎖（unlisted）${NC}"
   echo -e "${YELLOW}=====================================================${NC}"
   echo ""
-  warn "測試完成後記得重新鎖定：./scripts/youtube-secure.sh --mode lock"
+  warn "測試完成後記得重新鎖定：./script/youtube-secure.sh --mode lock"
   exit 0
 fi
 

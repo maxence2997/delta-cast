@@ -12,8 +12,8 @@
 # 前置需求：gcloud CLI 已登入（gcloud auth login）
 #
 # 執行方式：
-#   chmod +x scripts/gcp-setup.sh
-#   ./scripts/gcp/gcp-setup.sh   # reads from scripts/.env
+#   chmod +x script/gcp-setup.sh
+#   ./script/gcp/gcp-setup.sh   # reads from script/.env
 #
 # 完成後輸出外部 IP，記得在 DNS 設定 A Record 並填入 .env 的 GCP_CDN_DOMAIN。
 # =============================================================================
@@ -35,7 +35,7 @@ MISSING=()
 [ -z "${GCP_BUCKET_NAME:-}" ] && MISSING+=("GCP_BUCKET_NAME")
 if [ ${#MISSING[@]} -gt 0 ]; then
   echo "Error: missing required env vars: ${MISSING[*]}" >&2
-  echo "Copy scripts/.env.example to scripts/.env and fill in values." >&2
+  echo "Copy script/.env.example to script/.env and fill in values." >&2
   exit 1
 fi
 

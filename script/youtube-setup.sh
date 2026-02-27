@@ -17,11 +17,11 @@
 #   - python3（捕捉 OAuth callback）
 #
 # 執行方式：
-#   chmod +x scripts/youtube-setup.sh
-#   ./scripts/youtube-setup.sh
+#   chmod +x script/youtube-setup.sh
+#   ./script/youtube-setup.sh
 #
 #   若已有 Refresh Token 只想驗證：
-#   YOUTUBE_REFRESH_TOKEN=xxx ./scripts/youtube-setup.sh
+#   YOUTUBE_REFRESH_TOKEN=xxx ./script/youtube-setup.sh
 # =============================================================================
 
 set -euo pipefail
@@ -38,7 +38,7 @@ fi
 # ── 必填變數檢查 ──────────────────────────────────────────────────────────────
 if [ -z "${GCP_PROJECT_ID:-}" ]; then
   echo "Error: GCP_PROJECT_ID is not set." >&2
-  echo "Copy scripts/.env.example to scripts/.env and fill in values." >&2
+  echo "Copy script/.env.example to script/.env and fill in values." >&2
   exit 1
 fi
 
@@ -295,4 +295,4 @@ echo "  YOUTUBE_REFRESH_TOKEN=${YOUTUBE_REFRESH_TOKEN}"
 echo ""
 warn "⚠️  以上資訊含有敏感 Secret，請勿加入版本控制。"
 warn "⚠️  YouTube 直播功能需頻道通過 24h 審核才可使用。"
-warn "⚠️  若需刪除所有資源：./scripts/youtube-teardown.sh"
+warn "⚠️  若需刪除所有資源：./script/youtube-teardown.sh"

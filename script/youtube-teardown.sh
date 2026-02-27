@@ -18,11 +18,11 @@
 #     https://console.cloud.google.com/apis/credentials
 #
 # 執行方式：
-#   chmod +x scripts/youtube-teardown.sh
-#   ./scripts/youtube-teardown.sh
+#   chmod +x script/youtube-teardown.sh
+#   ./script/youtube-teardown.sh
 #
 # 若要跳過確認提示（CI 環境）：
-#   SKIP_CONFIRM=1 ./scripts/youtube-teardown.sh
+#   SKIP_CONFIRM=1 ./script/youtube-teardown.sh
 # =============================================================================
 
 set -euo pipefail
@@ -39,7 +39,7 @@ fi
 # ── 必填變數檢查 ──────────────────────────────────────────────────────────────
 if [ -z "${GCP_PROJECT_ID:-}" ]; then
   echo "Error: GCP_PROJECT_ID is not set." >&2
-  echo "Copy scripts/.env.example to scripts/.env and fill in values." >&2
+  echo "Copy script/.env.example to script/.env and fill in values." >&2
   exit 1
 fi
 
@@ -224,4 +224,4 @@ info "已保留（需手動刪除）："
 echo -e "  ${YELLOW}OAuth 2.0 Client（Client ID / Client Secret）${NC}"
 echo "  → https://console.cloud.google.com/apis/credentials?project=${PROJECT_ID}"
 echo ""
-warn "⚠️  重新部署時，執行 ./scripts/youtube-setup.sh 重新取得 Refresh Token。"
+warn "⚠️  重新部署時，執行 ./script/youtube-setup.sh 重新取得 Refresh Token。"
