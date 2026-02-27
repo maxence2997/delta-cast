@@ -46,13 +46,13 @@ vet: lint ## Alias for lint
 # ----------------------------------------
 
 web-dev: ## Start Next.js dev server
-	cd web && npm run dev
+	cd web && pnpm dev
 
 web-build: ## Build Next.js for production
-	cd web && npm run build
+	cd web && pnpm build
 
 web-lint: ## Lint frontend code
-	cd web && npm run lint
+	cd web && pnpm lint
 
 # ----------------------------------------
 # Docker

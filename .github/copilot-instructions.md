@@ -37,7 +37,7 @@ cd server && go run ./cmd/
 cd web && pnpm install && pnpm dev
 
 # Full stack
-docker-compose up
+docker-compose -f docker-compose.local.yml up
 ```
 
 ## Conventions

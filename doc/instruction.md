@@ -105,13 +105,13 @@ delta-cast/
 
 ### 環境需求
 
-| 工具       | 版本需求 | 說明                 |
-| ---------- | -------- | -------------------- |
-| Go         | 1.26+    | 後端開發             |
-| Node.js    | 22 LTS+  | 前端開發             |
-| pnpm       | 10+      | 前端套件管理（優先） |
-| Docker     | 24+      | 本地整合測試         |
-| gcloud CLI | latest   | GCP 資源管理與部署   |
+| 工具       | 版本需求 | 說明               |
+| ---------- | -------- | ------------------ |
+| Go         | 1.26+    | 後端開發           |
+| Node.js    | 22 LTS+  | 前端開發           |
+| pnpm       | 10+      | 前端套件管理       |
+| Docker     | 24+      | 本地整合測試       |
+| gcloud CLI | latest   | GCP 資源管理與部署 |
 
 ### 環境變數設定
 
@@ -138,7 +138,7 @@ pnpm install
 pnpm dev
 
 # 一鍵啟動所有服務（Docker）
-docker-compose up
+docker-compose -f docker-compose.local.yml up
 ```
 
 ### 分支策略
