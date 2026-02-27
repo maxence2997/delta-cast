@@ -24,7 +24,7 @@ func main() {
 	agoraMediaPushProvider := provider.NewAgoraMediaPushProvider(cfg.AgoraAppID, cfg.AgoraRegion, cfg.AgoraRESTKey, cfg.AgoraRESTSecret, cfg.AgoraTranscodingEnabled)
 	agoraChannelNCSProvider := provider.NewAgoraChannelNCSProvider(cfg.AgoraChannelNCSSecret)
 	agoraMediaPushNCSProvider := provider.NewAgoraMediaPushNCSProvider(cfg.AgoraMediaPushNCSSecret)
-	gcpProvider := provider.NewGCPLiveStreamProvider(cfg.GCPProjectID, cfg.GCPRegion, cfg.GCPBucketName, cfg.GCPCDNDomain)
+	gcpProvider := provider.NewGCPLiveStreamProvider(cfg.GCPProjectID, cfg.GCPRegion, cfg.GCPBucketName, cfg.GCPCDNDomain, cfg.GCPSAKeyJSON)
 	youtubeProvider := provider.NewYouTubeProvider(cfg.YouTubeClientID, cfg.YouTubeClientSecret, cfg.YouTubeRefreshToken)
 
 	// Service

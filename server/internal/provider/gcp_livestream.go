@@ -3,10 +3,13 @@ package provider
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	livestreamapi "cloud.google.com/go/video/livestream/apiv1"
 	livestreampb "cloud.google.com/go/video/livestream/apiv1/livestreampb"
+	"golang.org/x/oauth2/google"
+	"google.golang.org/api/option"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -15,16 +18,19 @@ type gcpLiveStreamProvider struct {
 	region     string
 	bucketName string
 	cdnDomain  string
+	saKeyJSON  string
 	client     *livestreamapi.Client
 }
 
 // NewGCPLiveStreamProvider creates a new GCPLiveStreamProvider.
-func NewGCPLiveStreamProvider(projectID, region, bucketName, cdnDomain string) GCPLiveStreamProvider {
+// saKeyJSON is the full JSON content of a GCP Service Account key; leave empty to use ADC.
+func NewGCPLiveStreamProvider(projectID, region, bucketName, cdnDomain, saKeyJSON string) GCPLiveStreamProvider {
 	return &gcpLiveStreamProvider{
 		projectID:  projectID,
 		region:     region,
 		bucketName: bucketName,
 		cdnDomain:  cdnDomain,
+		saKeyJSON:  saKeyJSON,
 	}
 }
 
@@ -32,7 +38,18 @@ func (p *gcpLiveStreamProvider) getClient(ctx context.Context) (*livestreamapi.C
 	if p.client != nil {
 		return p.client, nil
 	}
-	client, err := livestreamapi.NewClient(ctx)
+	// Priority:
+	// 1. GOOGLE_APPLICATION_CREDENTIALS (ADC) — SDK picks it up automatically, no opts needed.
+	// 2. GCP_SA_KEY_JSON — fallback for PaaS environments that cannot mount files (e.g. Railway).
+	var opts []option.ClientOption
+	if os.Getenv("GOOGLE_APPLICATION_CREDENTIALS") == "" && p.saKeyJSON != "" {
+		jwtCfg, err := google.JWTConfigFromJSON([]byte(p.saKeyJSON), "https://www.googleapis.com/auth/cloud-platform")
+		if err != nil {
+			return nil, fmt.Errorf("parse gcp service account key: %w", err)
+		}
+		opts = append(opts, option.WithTokenSource(jwtCfg.TokenSource(ctx)))
+	}
+	client, err := livestreamapi.NewClient(ctx, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("create livestream client: %w", err)
 	}

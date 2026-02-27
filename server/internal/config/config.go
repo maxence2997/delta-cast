@@ -48,6 +48,10 @@ type Config struct {
 	GCPRegion     string
 	GCPBucketName string
 	GCPCDNDomain  string
+	// GCPSAKeyJSON is the full JSON content of a GCP Service Account key.
+	// Used in environments that cannot mount files (e.g. Railway).
+	// Takes priority over GOOGLE_APPLICATION_CREDENTIALS / ADC.
+	GCPSAKeyJSON string
 
 	// YouTube
 	YouTubeClientID     string
@@ -83,21 +87,22 @@ func Load() (*Config, error) {
 		AgoraMediaPushNCSSecret: os.Getenv("AGORA_MEDIA_PUSH_NCS_SECRET"),
 		AgoraRegion:             getEnv("AGORA_REGION", "ap"),
 		AgoraTranscodingEnabled: getEnvBool("AGORA_TRANSCODING_ENABLED", false),
-		GCPProjectID:         os.Getenv("GCP_PROJECT_ID"),
-		GCPRegion:            getEnv("GCP_REGION", "us-central1"),
-		GCPBucketName:        os.Getenv("GCP_BUCKET_NAME"),
-		GCPCDNDomain:         os.Getenv("GCP_CDN_DOMAIN"),
-		GCPRelayEnabled:      getEnvBool("GCP_RELAY_ENABLED", true),
-		YouTubeClientID:      os.Getenv("YOUTUBE_CLIENT_ID"),
-		YouTubeClientSecret:  os.Getenv("YOUTUBE_CLIENT_SECRET"),
-		YouTubeRefreshToken:  os.Getenv("YOUTUBE_REFRESH_TOKEN"),
-		YouTubeRelayEnabled:  getEnvBool("YOUTUBE_RELAY_ENABLED", true),
-		CORSOrigins:          getEnvStringSlice("CORS_ORIGINS", []string{"http://localhost:3000", "http://localhost:3001"}),
-		CORSMethods:          getEnvStringSlice("CORS_METHODS", []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}),
-		CORSHeaders:          getEnvStringSlice("CORS_HEADERS", []string{"Origin", "Content-Type", "Authorization"}),
-		CORSExposeHeaders:    getEnvStringSlice("CORS_EXPOSE_HEADERS", []string{"Content-Length"}),
-		CORSAllowCredentials: getEnvBool("CORS_ALLOW_CREDENTIALS", true),
-		CORSMaxAge:           getEnvDurationHours("CORS_MAX_AGE_HOURS", 12*time.Hour),
+		GCPProjectID:            os.Getenv("GCP_PROJECT_ID"),
+		GCPRegion:               getEnv("GCP_REGION", "us-central1"),
+		GCPBucketName:           os.Getenv("GCP_BUCKET_NAME"),
+		GCPCDNDomain:            os.Getenv("GCP_CDN_DOMAIN"),
+		GCPSAKeyJSON:            os.Getenv("GCP_SA_KEY_JSON"),
+		GCPRelayEnabled:         getEnvBool("GCP_RELAY_ENABLED", true),
+		YouTubeClientID:         os.Getenv("YOUTUBE_CLIENT_ID"),
+		YouTubeClientSecret:     os.Getenv("YOUTUBE_CLIENT_SECRET"),
+		YouTubeRefreshToken:     os.Getenv("YOUTUBE_REFRESH_TOKEN"),
+		YouTubeRelayEnabled:     getEnvBool("YOUTUBE_RELAY_ENABLED", true),
+		CORSOrigins:             getEnvStringSlice("CORS_ORIGINS", []string{"http://localhost:3000", "http://localhost:3001"}),
+		CORSMethods:             getEnvStringSlice("CORS_METHODS", []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}),
+		CORSHeaders:             getEnvStringSlice("CORS_HEADERS", []string{"Origin", "Content-Type", "Authorization"}),
+		CORSExposeHeaders:       getEnvStringSlice("CORS_EXPOSE_HEADERS", []string{"Content-Length"}),
+		CORSAllowCredentials:    getEnvBool("CORS_ALLOW_CREDENTIALS", true),
+		CORSMaxAge:              getEnvDurationHours("CORS_MAX_AGE_HOURS", 12*time.Hour),
 	}
 
 	if err := cfg.validate(); err != nil {

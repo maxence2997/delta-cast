@@ -7,6 +7,10 @@ services:
       - "8080:8080"
     env_file:
       - ./server/.env.local
+    environment:
+      - GOOGLE_APPLICATION_CREDENTIALS=/run/secrets/gcp-sa-key.json
+    volumes:
+      - ${HOME}/deltacast-sa-key.json:/run/secrets/gcp-sa-key.json:ro
     restart: unless-stopped
 
   web:
