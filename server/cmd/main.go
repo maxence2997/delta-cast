@@ -39,6 +39,9 @@ func main() {
 
 	// Router
 	r := gin.Default()
+	if err := r.SetTrustedProxies(cfg.TrustedProxies); err != nil {
+		log.Fatalf("set trusted proxies: %v", err)
+	}
 	r.Use(cors.New(cors.Config{
 		AllowOrigins:     cfg.CORSOrigins,
 		AllowMethods:     cfg.CORSMethods,

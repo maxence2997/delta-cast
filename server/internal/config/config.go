@@ -62,6 +62,11 @@ type Config struct {
 	YouTubeClientSecret string
 	YouTubeRefreshToken string
 
+	// TrustedProxies is the list of CIDR ranges or IPs that Gin trusts as reverse proxies.
+	// Leave nil (unset) for local development. In production behind a Load Balancer,
+	// set to the internal IP range, e.g. "10.0.0.0/8" or "169.254.0.0/16" (Cloud Run).
+	TrustedProxies []string
+
 	// CORS
 	// CORSOrigins is the list of allowed origins for CORS requests.
 	// Defaults to localhost:3000 and localhost:3001 for local development.
@@ -102,6 +107,7 @@ func Load() (*Config, error) {
 		YouTubeClientSecret:     os.Getenv("YOUTUBE_CLIENT_SECRET"),
 		YouTubeRefreshToken:     os.Getenv("YOUTUBE_REFRESH_TOKEN"),
 		YouTubeRelayEnabled:     getEnvBool("YOUTUBE_RELAY_ENABLED", true),
+		TrustedProxies:          getEnvStringSlice("TRUSTED_PROXIES", nil),
 		CORSOrigins:             getEnvStringSlice("CORS_ORIGINS", []string{"http://localhost:3000", "http://localhost:3001"}),
 		CORSMethods:             getEnvStringSlice("CORS_METHODS", []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}),
 		CORSHeaders:             getEnvStringSlice("CORS_HEADERS", []string{"Origin", "Content-Type", "Authorization"}),
