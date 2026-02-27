@@ -56,6 +56,6 @@ docker-compose up
 5. **Idempotent webhook handling** — Agora NCS may send duplicate events; guard with session state checks.
 6. **Single active session** — POC supports one session at a time. Duplicate `start` returns existing session, not a new one.
 7. **Task tracking** — when completing items related to [doc/task-tracking.md](../doc/task-tracking.md), update the checkboxes there.
-8. **Documentation** — update `doc/spec.md`, `doc/instruction.md` and `doc/api.md` with any design changes or new implementation details.
+8. **Documentation** — update `doc/spec.md`, `doc/instruction.md`, `doc/api.md`, `README.md` with any design changes or new implementation details.
 9. **Accuracy** — if you have questions or need clarification, ask in the project chat or create an issue. Do not make assumptions without confirming.
 10. **Language Consistency** — When the user provides prompts or questions in Traditional Chinese, always respond in Traditional Chinese; otherwise, respond in English. This ensures clear communication and maintains consistency throughout the project.
