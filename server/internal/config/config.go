@@ -48,9 +48,13 @@ type Config struct {
 	GCPRegion     string
 	GCPBucketName string
 	GCPCDNDomain  string
+	// GCPSAKeyPath is the file path to a GCP Service Account key JSON file.
+	// Equivalent to GOOGLE_APPLICATION_CREDENTIALS but uses a GCP_* prefix for consistency.
+	// Prefer this over GCPSAKeyJSON when file mounting is available.
+	GCPSAKeyPath string
 	// GCPSAKeyJSON is the full JSON content of a GCP Service Account key.
 	// Used in environments that cannot mount files (e.g. Railway).
-	// Takes priority over GOOGLE_APPLICATION_CREDENTIALS / ADC.
+	// Takes priority over GCPSAKeyPath / ADC.
 	GCPSAKeyJSON string
 
 	// YouTube
@@ -91,6 +95,7 @@ func Load() (*Config, error) {
 		GCPRegion:               getEnv("GCP_REGION", "us-central1"),
 		GCPBucketName:           os.Getenv("GCP_BUCKET_NAME"),
 		GCPCDNDomain:            os.Getenv("GCP_CDN_DOMAIN"),
+		GCPSAKeyPath:            os.Getenv("GCP_SA_KEY_PATH"),
 		GCPSAKeyJSON:            os.Getenv("GCP_SA_KEY_JSON"),
 		GCPRelayEnabled:         getEnvBool("GCP_RELAY_ENABLED", true),
 		YouTubeClientID:         os.Getenv("YOUTUBE_CLIENT_ID"),

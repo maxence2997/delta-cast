@@ -276,7 +276,7 @@ if [[ -n "${NS_RECORDS:-}" ]]; then
   echo ""
 fi
 echo "系統環境變數（加入 ~/.zshrc 或 ~/.bashrc）："
-echo "  export GOOGLE_APPLICATION_CREDENTIALS=$SA_KEY_PATH"
+echo "  export GCP_SA_KEY_PATH=$SA_KEY_PATH"
 echo ""
 warn "⚠️  $SA_KEY_PATH 是敏感檔案，勿加入版本控制。"
 warn "⚠️  CDN IP 可能需要幾分鐘才能生效。"

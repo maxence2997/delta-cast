@@ -3,7 +3,6 @@ package provider
 import (
 	"context"
 	"fmt"
-	"os"
 	"time"
 
 	livestreamapi "cloud.google.com/go/video/livestream/apiv1"
@@ -18,18 +17,22 @@ type gcpLiveStreamProvider struct {
 	region     string
 	bucketName string
 	cdnDomain  string
+	saKeyPath  string
 	saKeyJSON  string
 	client     *livestreamapi.Client
 }
 
 // NewGCPLiveStreamProvider creates a new GCPLiveStreamProvider.
-// saKeyJSON is the full JSON content of a GCP Service Account key; leave empty to use ADC.
-func NewGCPLiveStreamProvider(projectID, region, bucketName, cdnDomain, saKeyJSON string) GCPLiveStreamProvider {
+// saKeyPath is the file path to a GCP Service Account key JSON file (GCP_SA_KEY_PATH).
+// saKeyJSON is the full JSON content of a GCP Service Account key (GCP_SA_KEY_JSON); used as fallback.
+// Leave both empty to use Application Default Credentials (ADC).
+func NewGCPLiveStreamProvider(projectID, region, bucketName, cdnDomain, saKeyPath, saKeyJSON string) GCPLiveStreamProvider {
 	return &gcpLiveStreamProvider{
 		projectID:  projectID,
 		region:     region,
 		bucketName: bucketName,
 		cdnDomain:  cdnDomain,
+		saKeyPath:  saKeyPath,
 		saKeyJSON:  saKeyJSON,
 	}
 }
@@ -39,10 +42,13 @@ func (p *gcpLiveStreamProvider) getClient(ctx context.Context) (*livestreamapi.C
 		return p.client, nil
 	}
 	// Priority:
-	// 1. GOOGLE_APPLICATION_CREDENTIALS (ADC) — SDK picks it up automatically, no opts needed.
-	// 2. GCP_SA_KEY_JSON — fallback for PaaS environments that cannot mount files (e.g. Railway).
+	// 1. GCP_SA_KEY_PATH — file path to SA key, passed via option.WithCredentialsFile.
+	// 2. GCP_SA_KEY_JSON — full JSON content, for PaaS environments that cannot mount files (e.g. Railway).
+	// 3. ADC — SDK picks up ambient credentials automatically when neither above is set.
 	var opts []option.ClientOption
-	if os.Getenv("GOOGLE_APPLICATION_CREDENTIALS") == "" && p.saKeyJSON != "" {
+	if p.saKeyPath != "" {
+		opts = append(opts, option.WithCredentialsFile(p.saKeyPath))
+	} else if p.saKeyJSON != "" {
 		jwtCfg, err := google.JWTConfigFromJSON([]byte(p.saKeyJSON), "https://www.googleapis.com/auth/cloud-platform")
 		if err != nil {
 			return nil, fmt.Errorf("parse gcp service account key: %w", err)

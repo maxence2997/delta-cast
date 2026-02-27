@@ -117,27 +117,27 @@ gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
 gcloud iam service-accounts keys create ~/deltacast-sa-key.json \
   --iam-account=deltacast-server@YOUR_PROJECT_ID.iam.gserviceaccount.com
 
-export GOOGLE_APPLICATION_CREDENTIALS=~/deltacast-sa-key.json
+export GCP_SA_KEY_PATH=~/deltacast-sa-key.json
 ```
 
 ---
 
 ## 環境變數對應
 
-| 環境變數                         | 值                        | 備註                         |
-| -------------------------------- | ------------------------- | ---------------------------- |
-| `GCP_PROJECT_ID`                 | `<YOUR_PROJECT_ID>`       |                              |
-| `GCP_REGION`                     | `asia-east1`              |                              |
-| `GCP_BUCKET_NAME`                | `<YOUR_BUCKET_NAME>`      |                              |
-| `GCP_CDN_DOMAIN`                 | `<YOUR_CDN_DOMAIN>`       | A Record 已指向 Cloud CDN IP |
-| `GOOGLE_APPLICATION_CREDENTIALS` | `~/deltacast-sa-key.json` | 系統環境變數，不進 .env 檔   |
+| 環境變數          | 值                        | 備註                         |
+| ----------------- | ------------------------- | ---------------------------- |
+| `GCP_PROJECT_ID`  | `<YOUR_PROJECT_ID>`       |                              |
+| `GCP_REGION`      | `asia-east1`              |                              |
+| `GCP_BUCKET_NAME` | `<YOUR_BUCKET_NAME>`      |                              |
+| `GCP_CDN_DOMAIN`  | `<YOUR_CDN_DOMAIN>`       | A Record 已指向 Cloud CDN IP |
+| `GCP_SA_KEY_PATH` | `~/deltacast-sa-key.json` | 寫入 server/.env.local       |
 
 ---
 
 ## 快速驗證
 
 ```bash
-export GOOGLE_APPLICATION_CREDENTIALS=~/deltacast-sa-key.json
+export GCP_SA_KEY_PATH=~/deltacast-sa-key.json
 
 # 驗證 SA 認證
 gcloud auth application-default print-access-token

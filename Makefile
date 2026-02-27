@@ -16,8 +16,8 @@ help: ## Show available commands
 build: ## Build the Go server binary
 	cd server && go build -o bin/server ./cmd/
 
-run: ## Run the Go server locally
-	cd server && go run ./cmd/
+run: ## Run the Go server locally (loads server/.env.local if present)
+	cd server && set -a && [ -f .env.local ] && . .env.local; set +a && go run ./cmd/
 
 test: ## Run all Go tests
 	cd server && go test ./...

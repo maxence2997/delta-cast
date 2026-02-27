@@ -167,10 +167,10 @@ else
   fail_ "SA key file missing: ${SA_KEY_PATH} (re-run script/gcp-setup.sh)"
 fi
 
-if [[ -n "${GOOGLE_APPLICATION_CREDENTIALS:-}" ]]; then
-  ok "GOOGLE_APPLICATION_CREDENTIALS set: ${GOOGLE_APPLICATION_CREDENTIALS}"
+if [[ -n "${GCP_SA_KEY_PATH:-}" ]]; then
+  ok "GCP_SA_KEY_PATH set: ${GCP_SA_KEY_PATH}"
 else
-  warn_ "GOOGLE_APPLICATION_CREDENTIALS not set in shell (add to ~/.zshrc)"
+  warn_ "GCP_SA_KEY_PATH not set in shell (add to server/.env.local or export in ~/.zshrc)"
 fi
 
 # ---------------------------------------------------------------------------
