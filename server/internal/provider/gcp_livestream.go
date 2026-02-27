@@ -118,19 +118,43 @@ func (p *gcpLiveStreamProvider) CreateChannel(ctx context.Context, channelID str
 
 	outputURI := fmt.Sprintf("gs://%s/%s/", p.bucketName, channelID)
 
+	// segmentDuration is the single source of truth for both GOP duration and HLS segment
+	// duration. Keeping them equal ensures every segment starts with an IDR (keyframe),
+	// which allows players to begin decoding from any segment without prior context.
+	segmentDuration := durationpb.New(2 * time.Second)
+
 	req := &livestreampb.CreateChannelRequest{
 		Parent:    p.locationPath(),
 		ChannelId: channelID,
+		// Channel pipeline overview:
+		//
+		//   ElementaryStream (raw encoded essence, one per codec)
+		//       ├── video-stream  (H.264 video only)
+		//       └── audio-stream  (AAC audio only)
+		//             ↓ packaged into fmp4 segments (1 elementary stream per MuxStream — fmp4 constraint)
+		//   MuxStream (segment files written to GCS)
+		//       ├── mux-video  →  contains video-stream only
+		//       └── mux-audio  →  contains audio-stream only
+		//             ↓ referenced by
+		//   Manifest
+		//       └── main.m3u8  →  HLS playlist combining mux-video + mux-audio
+		//
 		Channel: &livestreampb.Channel{
+			// InputAttachments binds an input source to this channel.
+			// Key is a logical identifier; Input points to the RTMP input endpoint created earlier.
 			InputAttachments: []*livestreampb.InputAttachment{
 				{
 					Key:   "primary-input",
 					Input: p.inputPath(inputID),
 				},
 			},
+			// Output is the GCS bucket path where transcoded HLS segment files are written.
+			// Format: gs://<bucket>/<channelID>/
 			Output: &livestreampb.Channel_Output{
 				Uri: outputURI,
 			},
+			// ElementaryStreams define the raw transcoded essence.
+			// Each stream must be either pure video or pure audio — never mixed.
 			ElementaryStreams: []*livestreampb.ElementaryStream{
 				{
 					Key: "video-stream",
@@ -138,13 +162,13 @@ func (p *gcpLiveStreamProvider) CreateChannel(ctx context.Context, channelID str
 						VideoStream: &livestreampb.VideoStream{
 							CodecSettings: &livestreampb.VideoStream_H264{
 								H264: &livestreampb.VideoStream_H264CodecSettings{
-									Profile:    "high",
-									BitrateBps: 2500000,
-									FrameRate:  30,
+									Profile:    "high",  // H.264 High Profile — broadly compatible
+									BitrateBps: 2500000, // 2.5 Mbps — suitable for 720p
+									FrameRate:  30,      // 30 fps
 									GopMode: &livestreampb.VideoStream_H264CodecSettings_GopDuration{
-										GopDuration: durationpb.New(2 * time.Second),
+										GopDuration: segmentDuration,
 									},
-									WidthPixels:  1280,
+									WidthPixels:  1280, // 720p resolution (1280×720)
 									HeightPixels: 720,
 								},
 							},
@@ -155,29 +179,47 @@ func (p *gcpLiveStreamProvider) CreateChannel(ctx context.Context, channelID str
 					Key: "audio-stream",
 					ElementaryStream: &livestreampb.ElementaryStream_AudioStream{
 						AudioStream: &livestreampb.AudioStream{
-							Codec:           "aac",
-							BitrateBps:      128000,
-							ChannelCount:    2,
-							SampleRateHertz: 48000,
+							Codec:           "aac",  // AAC — standard HLS audio codec
+							BitrateBps:      128000, // 128 kbps — standard stereo quality
+							ChannelCount:    2,      // Stereo (left + right)
+							SampleRateHertz: 48000,  // 48 kHz — broadcast audio standard
 						},
 					},
 				},
 			},
+			// MuxStreams package elementary streams into fmp4 segment files stored in GCS.
+			// fmp4 constraint: each MuxStream must contain exactly one elementary stream,
+			// so video and audio are split into separate MuxStreams.
 			MuxStreams: []*livestreampb.MuxStream{
 				{
-					Key:               "mux-video-audio",
-					ElementaryStreams: []string{"video-stream", "audio-stream"},
+					Key:               "mux-video",
+					ElementaryStreams: []string{"video-stream"}, // video only
 					SegmentSettings: &livestreampb.SegmentSettings{
-						SegmentDuration: durationpb.New(2 * time.Second),
+						// 2 s is a low-latency setting; shorter = lower latency but higher CDN request rate.
+						SegmentDuration: segmentDuration,
+					},
+				},
+				{
+					Key:               "mux-audio",
+					ElementaryStreams: []string{"audio-stream"}, // audio only
+					SegmentSettings: &livestreampb.SegmentSettings{
+						SegmentDuration: segmentDuration,
 					},
 				},
 			},
+			// Manifests define the HLS playlist (.m3u8) file read by the player.
+			// The player uses the manifest to discover available segments and merges
+			// the separate video and audio tracks during playback.
 			Manifests: []*livestreampb.Manifest{
 				{
-					FileName:            "main.m3u8",
-					Type:                livestreampb.Manifest_HLS,
-					MuxStreams:          []string{"mux-video-audio"},
-					MaxSegmentCount:     5,
+					FileName:   "main.m3u8",                        // playlist filename — last segment of the CDN URL
+					Type:       livestreampb.Manifest_HLS,          // HLS (Apple HTTP Live Streaming)
+					MuxStreams: []string{"mux-video", "mux-audio"}, // combines both MuxStreams above
+					// MaxSegmentCount: sliding window size of the playlist.
+					// 5 segments × 2 s = player sees up to the last 10 s of the stream.
+					MaxSegmentCount: 5,
+					// SegmentKeepDuration: how long GCS retains segment files.
+					// 60 s gives slow clients enough time to fetch slightly older segments.
 					SegmentKeepDuration: durationpb.New(60 * time.Second),
 				},
 			},
