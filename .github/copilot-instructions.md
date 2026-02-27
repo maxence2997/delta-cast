@@ -44,16 +44,18 @@ docker-compose up
 
 - **Go**: `gofmt`/`goimports`, snake_case filenames (`live_service.go`), GoDoc on public functions, `if err != nil` error handling (no panic), secrets from env vars only.
 - **TypeScript/React**: ESLint + Prettier, kebab-case filenames (`live-player.tsx`), functional components + hooks only.
-- **Git**: Conventional Commits in English (`feat:`, `fix:`, `refactor:`, `doc:`, `chore:`). One logical change per commit.
+- **Git**: Adhere to the Conventional Commits specification. Use English for the commit type (e.g., feat:, fix:, refactor:, doc:, chore:), but write the descriptive message in Traditional Chinese. Ensure each commit represents exactly one logical change.
 - **Tests**: Co-located with source (`_test.go` / `.test.ts`). Cover happy path + at least one error path. Required for new service/provider functions.
 
 ## Critical Rules
 
-1. **Read before write** — always read `doc/spec.md`, `doc/instruction.md`, and the target file fully before editing.
+1. **Read before write** — always read `doc/spec.md`, `doc/instruction.md`, `doc/api.md`, and the target file fully before editing.
 2. **Minimal changes** — one concern per edit; no drive-by refactors.
-3. **No hardcoded secrets** — all API keys/secrets via environment variables (see `server/.env.example`).
+3. **No hardcoded secrets** — all API keys/secrets via environment variables (see `server/.env.example`, `script/.env.example` and `web/.env.example`), and the secrets must never be committed to version control.
 4. **Resource cleanup is critical** — GCP resources are billed per-time. The stop flow must attempt every cleanup step even if earlier steps fail (log error, continue).
 5. **Idempotent webhook handling** — Agora NCS may send duplicate events; guard with session state checks.
 6. **Single active session** — POC supports one session at a time. Duplicate `start` returns existing session, not a new one.
-7. **Two-phase flow** — `prepare` pre-warms resources, `start` only returns token. Never allocate GCP/YouTube resources in the `start` path.
-8. **Task tracking** — when completing items related to [doc/task-tracking.md](../doc/task-tracking.md), update the checkboxes there.
+7. **Task tracking** — when completing items related to [doc/task-tracking.md](../doc/task-tracking.md), update the checkboxes there.
+8. **Documentation** — update `doc/spec.md`, `doc/instruction.md` and `doc/api.md` with any design changes or new implementation details.
+9. **Accuracy** — if you have questions or need clarification, ask in the project chat or create an issue. Do not make assumptions without confirming.
+10. **Language Consistency** — When the user provides prompts or questions in Traditional Chinese, always respond in Traditional Chinese; otherwise, respond in English. This ensures clear communication and maintains consistency throughout the project.
