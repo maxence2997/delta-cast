@@ -6,7 +6,7 @@ DeltaCast is a **one-in, multi-out live streaming relay** system. A streamer pus
 
 ## Architecture
 
-- **`server/`** — Golang orchestrator (Go 1.24+). Strict 3-layer architecture:
+- **`server/`** — Golang orchestrator (Go 1.26+). Strict 3-layer architecture:
   - `internal/handler/` → HTTP request/response only, no business logic
   - `internal/middleware/` → JWT auth, logging, and other cross-cutting concerns
   - `internal/service/` → business logic & session state machine (`idle → preparing → ready → live → stopping → idle`)
