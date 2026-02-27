@@ -12,11 +12,11 @@ services:
   web:
     build:
       context: ./web
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.local
+      args:
+        - NEXT_PUBLIC_API_URL=http://server:8080
     ports:
       - "3000:3000"
-    environment:
-      - NEXT_PUBLIC_API_URL=http://server:8080
     depends_on:
       - server
     restart: unless-stopped

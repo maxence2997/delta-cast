@@ -58,17 +58,17 @@ web-lint: ## Lint frontend code
 # Docker
 # ----------------------------------------
 
-docker-up: ## Start all services via docker-compose
-	docker-compose up -d
+docker-up: ## Start all services via docker-compose (local only)
+	docker-compose -f docker-compose.local.yml up -d
 
 docker-down: ## Stop all services
-	docker-compose down
+	docker-compose -f docker-compose.local.yml down
 
 docker-build: ## Rebuild and start all services
-	docker-compose up -d --build
+	docker-compose -f docker-compose.local.yml up -d --build
 
 docker-logs: ## Tail logs from all services
-	docker-compose logs -f
+	docker-compose -f docker-compose.local.yml logs -f
 
 # ----------------------------------------
 # Setup & Utilities

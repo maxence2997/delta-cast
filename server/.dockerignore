@@ -1,0 +1,16 @@
+# 編譯產出
+bin/
+
+# 環境變數（機密）
+.env
+.env.*
+
+# 測試檔案
+*_test.go
+
+# Git
+.git
+.gitignore
+
+# 文件
+*.md
