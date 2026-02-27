@@ -28,7 +28,10 @@ func main() {
 	youtubeProvider := provider.NewYouTubeProvider(cfg.YouTubeClientID, cfg.YouTubeClientSecret, cfg.YouTubeRefreshToken)
 
 	// Service
-	liveSvc := service.NewLiveService(agoraTokenProvider, agoraMediaPushProvider, gcpProvider, youtubeProvider)
+	liveSvc := service.NewLiveService(agoraTokenProvider, agoraMediaPushProvider, gcpProvider, youtubeProvider, service.RelayOptions{
+		GCPRelayEnabled:     cfg.GCPRelayEnabled,
+		YouTubeRelayEnabled: cfg.YouTubeRelayEnabled,
+	})
 
 	// Handlers
 	liveHandler := handler.NewLiveHandler(liveSvc, cfg.AgoraAppID)

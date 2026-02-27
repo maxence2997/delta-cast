@@ -116,7 +116,7 @@ func newTestService() (*LiveService, *mockAgoraMediaPush, *mockGCP, *mockYouTube
 	gcpProv := &mockGCP{}
 	ytProv := &mockYouTube{}
 
-	svc := NewLiveService(tokenProv, pushProv, gcpProv, ytProv)
+	svc := NewLiveService(tokenProv, pushProv, gcpProv, ytProv, RelayOptions{GCPRelayEnabled: true, YouTubeRelayEnabled: true})
 	return svc, pushProv, gcpProv, ytProv
 }
 

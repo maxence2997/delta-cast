@@ -32,6 +32,17 @@ type Config struct {
 	// to reduce costs, since both GCP and YouTube can accept the raw RTMP stream.
 	AgoraTranscodingEnabled bool
 
+	// Feature flags
+
+	// YouTubeRelayEnabled controls whether YouTube is included as a relay target.
+	// Defaults to true. Set to false to skip all YouTube API calls (useful for debugging).
+	// When false, YOUTUBE_* env vars are not required.
+	YouTubeRelayEnabled bool
+	// GCPRelayEnabled controls whether GCP Live Stream is included as a relay target.
+	// Defaults to true. Set to false to skip all GCP Live Stream API calls (useful for debugging).
+	// When false, GCP_PROJECT_ID, GCP_BUCKET_NAME, and GCP_CDN_DOMAIN are not required.
+	GCPRelayEnabled bool
+
 	// GCP
 	GCPProjectID  string
 	GCPRegion     string
@@ -72,19 +83,21 @@ func Load() (*Config, error) {
 		AgoraMediaPushNCSSecret: os.Getenv("AGORA_MEDIA_PUSH_NCS_SECRET"),
 		AgoraRegion:             getEnv("AGORA_REGION", "ap"),
 		AgoraTranscodingEnabled: getEnvBool("AGORA_TRANSCODING_ENABLED", false),
-		GCPProjectID:            os.Getenv("GCP_PROJECT_ID"),
-		GCPRegion:               getEnv("GCP_REGION", "us-central1"),
-		GCPBucketName:           os.Getenv("GCP_BUCKET_NAME"),
-		GCPCDNDomain:            os.Getenv("GCP_CDN_DOMAIN"),
-		YouTubeClientID:         os.Getenv("YOUTUBE_CLIENT_ID"),
-		YouTubeClientSecret:     os.Getenv("YOUTUBE_CLIENT_SECRET"),
-		YouTubeRefreshToken:     os.Getenv("YOUTUBE_REFRESH_TOKEN"),
-		CORSOrigins:             getEnvStringSlice("CORS_ORIGINS", []string{"http://localhost:3000", "http://localhost:3001"}),
-		CORSMethods:             getEnvStringSlice("CORS_METHODS", []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}),
-		CORSHeaders:             getEnvStringSlice("CORS_HEADERS", []string{"Origin", "Content-Type", "Authorization"}),
-		CORSExposeHeaders:       getEnvStringSlice("CORS_EXPOSE_HEADERS", []string{"Content-Length"}),
-		CORSAllowCredentials:    getEnvBool("CORS_ALLOW_CREDENTIALS", true),
-		CORSMaxAge:              getEnvDurationHours("CORS_MAX_AGE_HOURS", 12*time.Hour),
+		GCPProjectID:         os.Getenv("GCP_PROJECT_ID"),
+		GCPRegion:            getEnv("GCP_REGION", "us-central1"),
+		GCPBucketName:        os.Getenv("GCP_BUCKET_NAME"),
+		GCPCDNDomain:         os.Getenv("GCP_CDN_DOMAIN"),
+		GCPRelayEnabled:      getEnvBool("GCP_RELAY_ENABLED", true),
+		YouTubeClientID:      os.Getenv("YOUTUBE_CLIENT_ID"),
+		YouTubeClientSecret:  os.Getenv("YOUTUBE_CLIENT_SECRET"),
+		YouTubeRefreshToken:  os.Getenv("YOUTUBE_REFRESH_TOKEN"),
+		YouTubeRelayEnabled:  getEnvBool("YOUTUBE_RELAY_ENABLED", true),
+		CORSOrigins:          getEnvStringSlice("CORS_ORIGINS", []string{"http://localhost:3000", "http://localhost:3001"}),
+		CORSMethods:          getEnvStringSlice("CORS_METHODS", []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}),
+		CORSHeaders:          getEnvStringSlice("CORS_HEADERS", []string{"Origin", "Content-Type", "Authorization"}),
+		CORSExposeHeaders:    getEnvStringSlice("CORS_EXPOSE_HEADERS", []string{"Content-Length"}),
+		CORSAllowCredentials: getEnvBool("CORS_ALLOW_CREDENTIALS", true),
+		CORSMaxAge:           getEnvDurationHours("CORS_MAX_AGE_HOURS", 12*time.Hour),
 	}
 
 	if err := cfg.validate(); err != nil {
@@ -102,12 +115,18 @@ func (c *Config) validate() error {
 		"AGORA_REST_SECRET":           c.AgoraRESTSecret,
 		"AGORA_CHANNEL_NCS_SECRET":    c.AgoraChannelNCSSecret,
 		"AGORA_MEDIA_PUSH_NCS_SECRET": c.AgoraMediaPushNCSSecret,
-		"GCP_PROJECT_ID":              c.GCPProjectID,
-		"GCP_BUCKET_NAME":             c.GCPBucketName,
-		"GCP_CDN_DOMAIN":              c.GCPCDNDomain,
-		"YOUTUBE_CLIENT_ID":           c.YouTubeClientID,
-		"YOUTUBE_CLIENT_SECRET":       c.YouTubeClientSecret,
-		"YOUTUBE_REFRESH_TOKEN":       c.YouTubeRefreshToken,
+	}
+
+	if c.GCPRelayEnabled {
+		required["GCP_PROJECT_ID"] = c.GCPProjectID
+		required["GCP_BUCKET_NAME"] = c.GCPBucketName
+		required["GCP_CDN_DOMAIN"] = c.GCPCDNDomain
+	}
+
+	if c.YouTubeRelayEnabled {
+		required["YOUTUBE_CLIENT_ID"] = c.YouTubeClientID
+		required["YOUTUBE_CLIENT_SECRET"] = c.YouTubeClientSecret
+		required["YOUTUBE_REFRESH_TOKEN"] = c.YouTubeRefreshToken
 	}
 
 	for key, val := range required {
