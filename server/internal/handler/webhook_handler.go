@@ -33,31 +33,25 @@ type agoraWebhookEnvelope struct {
 	Payload   json.RawMessage `json:"payload"`
 }
 
-// readAndVerifyChannelEvent reads the raw body and verifies the Agora-Signature header.
-// Returns (body, true) on success, or writes an error response and returns ("", false).
-func readAndVerifyChannelEvent(c *gin.Context, verifier provider.AgoraChannelNCSProvider) ([]byte, bool) {
-	body, err := io.ReadAll(c.Request.Body)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, model.ErrorResponse{Error: "bad_request", Message: "failed to read request body"})
-		return nil, false
-	}
-	sig := c.GetHeader("Agora-Signature")
-	if sig != "" && !verifier.VerifySignature(body, sig) {
-		c.JSON(http.StatusUnauthorized, model.ErrorResponse{Error: "unauthorized", Message: "invalid webhook signature"})
-		return nil, false
-	}
-	return body, true
+// agoraNCSVerifier is a local interface satisfied by both AgoraChannelNCSProvider and AgoraMediaPushNCSProvider.
+type agoraNCSVerifier interface {
+	VerifySignature(body []byte, signature string) bool
 }
 
-// readAndVerifyMediaPushEvent is the same as readAndVerifyChannelEvent but accepts AgoraMediaPushNCSProvider.
-func readAndVerifyMediaPushEvent(c *gin.Context, verifier provider.AgoraMediaPushNCSProvider) ([]byte, bool) {
+// readAndVerifyBody reads the raw request body and verifies the Agora-Signature header.
+// Returns (body, true) on success, or writes an error response and returns (nil, false).
+func readAndVerifyBody(c *gin.Context, verifier agoraNCSVerifier) ([]byte, bool) {
 	body, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, model.ErrorResponse{Error: "bad_request", Message: "failed to read request body"})
 		return nil, false
 	}
 	sig := c.GetHeader("Agora-Signature")
-	if sig != "" && !verifier.VerifySignature(body, sig) {
+	if sig == "" {
+		c.JSON(http.StatusUnauthorized, model.ErrorResponse{Error: "unauthorized", Message: "missing webhook signature"})
+		return nil, false
+	}
+	if !verifier.VerifySignature(body, sig) {
 		c.JSON(http.StatusUnauthorized, model.ErrorResponse{Error: "unauthorized", Message: "invalid webhook signature"})
 		return nil, false
 	}
@@ -74,7 +68,7 @@ type rtcChannelEventPayload struct {
 // HandleAgoraChannelEvent handles POST /v1/webhook/agora/channel — RTC Channel Event Callbacks.
 // Verifies the signature with AGORA_CHANNEL_NCS_SECRET.
 func (h *WebhookHandler) HandleAgoraChannelEvent(c *gin.Context) {
-	body, ok := readAndVerifyChannelEvent(c, h.agoraChannelNCS)
+	body, ok := readAndVerifyBody(c, h.agoraChannelNCS)
 	if !ok {
 		return
 	}
@@ -115,7 +109,7 @@ type mediaPushEventPayload struct {
 // HandleAgoraMediaPushEvent handles POST /v1/webhook/agora/media-push — Media Push Restful API notifications.
 // Verifies the signature with AGORA_MEDIA_PUSH_NCS_SECRET.
 func (h *WebhookHandler) HandleAgoraMediaPushEvent(c *gin.Context) {
-	body, ok := readAndVerifyMediaPushEvent(c, h.agoraMediaPushNCS)
+	body, ok := readAndVerifyBody(c, h.agoraMediaPushNCS)
 	if !ok {
 		return
 	}
