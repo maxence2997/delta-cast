@@ -1,13 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import dynamic from "next/dynamic";
 import Link from "next/link";
+import TokenInputClient from "@/components/token-input-client";
 import "./globals.css";
-
-// ssr: false prevents hydration mismatches from localStorage reads in useEffect
-const TokenInput = dynamic(() => import("@/components/token-input"), {
-  ssr: false,
-});
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -44,7 +39,7 @@ export default function RootLayout({
           <Link href="/audience" className="text-sm hover:underline">
             Audience
           </Link>
-          <TokenInput />
+          <TokenInputClient />
         </nav>
         <main className="max-w-5xl mx-auto px-6 py-8">{children}</main>
       </body>
