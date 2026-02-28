@@ -62,7 +62,7 @@ Webhook 端點不需要 JWT，改用 **Agora HMAC/SHA1 簽章驗證**（`Agora-S
 
 | 任務    | 步驟                                                                     |
 | ------- | ------------------------------------------------------------------------ |
-| GCP     | `CreateInput` → `CreateChannel` → `WaitForChannelReady` → `StartChannel` |
+| GCP     | `CreateInput` → `CreateChannel` → `StartChannel` → `WaitForChannelReady` |
 | YouTube | `CreateBroadcast` → `CreateStream` → `BindBroadcastToStream`             |
 
 兩者皆成功 → Session 狀態轉為 `ready`；任一失敗 → Session 狀態回到 `idle`，需重新呼叫 prepare。

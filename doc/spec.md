@@ -101,7 +101,7 @@ sequenceDiagram
     Note over API: 背景非同步分配資源（約 30-60 秒）
 
     par 背景並行資源分配
-        API->>GCP: CreateInput → CreateChannel → WaitForChannelReady → StartChannel
+        API->>GCP: CreateInput → CreateChannel → StartChannel → WaitForChannelReady
         GCP-->>API: inputURI
     and
         API->>YT: CreateBroadcast → CreateStream → BindBroadcastToStream

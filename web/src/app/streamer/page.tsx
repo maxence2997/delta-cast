@@ -61,16 +61,32 @@ export default function StreamerPage() {
     const next = !cameraEnabled;
     await videoTrackRef.current.setEnabled(next);
     setCameraEnabled(next);
+    // If already joined the channel, publish/unpublish the track accordingly
+    if (joined && hostClientRef.current) {
+      if (next) {
+        await hostClientRef.current.publish([videoTrackRef.current]);
+      } else {
+        await hostClientRef.current.unpublish([videoTrackRef.current]);
+      }
+    }
     console.log(`[Device] camera ${next ? "enabled" : "disabled"}`);
-  }, [cameraEnabled]);
+  }, [cameraEnabled, joined]);
 
   const toggleMic = useCallback(async () => {
     if (!audioTrackRef.current) return;
     const next = !micEnabled;
     await audioTrackRef.current.setEnabled(next);
     setMicEnabled(next);
+    // If already joined the channel, publish/unpublish the track accordingly
+    if (joined && hostClientRef.current) {
+      if (next) {
+        await hostClientRef.current.publish([audioTrackRef.current]);
+      } else {
+        await hostClientRef.current.unpublish([audioTrackRef.current]);
+      }
+    }
     console.log(`[Device] mic ${next ? "enabled" : "disabled"}`);
-  }, [micEnabled]);
+  }, [micEnabled, joined]);
 
   // Join Agora channel and publish tracks
   const joinAndPublish = useCallback(
@@ -85,11 +101,16 @@ export default function StreamerPage() {
 
       await hostClient.join(appId, channel, token, uid);
 
-      if (videoTrackRef.current && audioTrackRef.current) {
-        await hostClient.publish([
-          videoTrackRef.current,
-          audioTrackRef.current,
-        ]);
+      // Only publish tracks that are currently enabled; disabled tracks cannot be published
+      const tracksToPublish = [
+        videoTrackRef.current,
+        audioTrackRef.current,
+      ].filter((t) => t !== null && t.enabled) as (
+        | ICameraVideoTrack
+        | IMicrophoneAudioTrack
+      )[];
+      if (tracksToPublish.length > 0) {
+        await hostClient.publish(tracksToPublish);
       }
       setJoined(true);
     },

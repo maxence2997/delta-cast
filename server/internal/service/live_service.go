@@ -99,6 +99,7 @@ func (s *LiveService) Prepare(ctx context.Context) (*model.PrepareResponse, erro
 
 // allocateResources creates GCP and YouTube resources in parallel.
 func (s *LiveService) allocateResources(sessionID string) {
+	log.Printf("[prepare] starting resource allocation for session %s", sessionID)
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 
@@ -111,33 +112,41 @@ func (s *LiveService) allocateResources(sessionID string) {
 		wg     sync.WaitGroup
 	)
 
-	// GCP: Create Input → Create Channel → Wait for ready → Start Channel
+	// GCP: Create Input → Create Channel → Start Channel → Wait for ready
 	var gcpInputURI string
 	if s.relay.GCPRelayEnabled {
 		wg.Go(func() {
-
+			log.Printf("[GCP] creating input %s", inputID)
 			_, uri, err := s.gcp.CreateInput(ctx, inputID)
 			if err != nil {
 				gcpErr = fmt.Errorf("gcp create input: %w", err)
 				return
 			}
 			gcpInputURI = uri
+			log.Printf("[GCP] input ready, rtmp uri: %s", uri)
 
+			log.Printf("[GCP] creating channel %s", channelID)
 			_, err = s.gcp.CreateChannel(ctx, channelID, inputID)
 			if err != nil {
 				gcpErr = fmt.Errorf("gcp create channel: %w", err)
 				return
 			}
+			log.Printf("[GCP] channel created, starting...")
+
+			// StartChannel must be called before WaitForChannelReady.
+			// After CreateChannel the channel is in STOPPED state; only after
+			// StartChannel does it transition STARTING → AWAITING_INPUT.
+			if err := s.gcp.StartChannel(ctx, channelID); err != nil {
+				gcpErr = fmt.Errorf("gcp start channel: %w", err)
+				return
+			}
+			log.Printf("[GCP] channel started, waiting for AWAITING_INPUT...")
 
 			if err := s.gcp.WaitForChannelReady(ctx, channelID); err != nil {
 				gcpErr = fmt.Errorf("gcp wait for channel: %w", err)
 				return
 			}
-
-			if err := s.gcp.StartChannel(ctx, channelID); err != nil {
-				gcpErr = fmt.Errorf("gcp start channel: %w", err)
-				return
-			}
+			log.Printf("[GCP] channel ready")
 		})
 	}
 
@@ -150,28 +159,34 @@ func (s *LiveService) allocateResources(sessionID string) {
 	)
 	if s.relay.YouTubeRelayEnabled {
 		wg.Go(func() {
-
+			log.Printf("[YouTube] creating broadcast")
 			var err error
 			broadcastID, err = s.youtube.CreateBroadcast(ctx, fmt.Sprintf("DeltaCast Live %s", sessionID))
 			if err != nil {
 				ytErr = fmt.Errorf("youtube create broadcast: %w", err)
 				return
 			}
+			log.Printf("[YouTube] broadcast created: %s", broadcastID)
 
+			log.Printf("[YouTube] creating stream")
 			streamID, rtmpURL, streamKey, err = s.youtube.CreateStream(ctx)
 			if err != nil {
 				ytErr = fmt.Errorf("youtube create stream: %w", err)
 				return
 			}
+			log.Printf("[YouTube] stream created: %s", streamID)
 
+			log.Printf("[YouTube] binding broadcast to stream")
 			if err := s.youtube.BindBroadcastToStream(ctx, broadcastID, streamID); err != nil {
 				ytErr = fmt.Errorf("youtube bind: %w", err)
 				return
 			}
+			log.Printf("[YouTube] broadcast bound to stream, ready")
 		})
 	}
 
 	wg.Wait()
+	log.Printf("[prepare] resource allocation finished for session %s", sessionID)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -366,46 +381,78 @@ func (s *LiveService) Stop(ctx context.Context) (*model.StopResponse, error) {
 	inputID := s.session.GCPInputID
 	s.mu.Unlock()
 
+	log.Printf("[stop] beginning teardown for session %s", sessionID)
+
 	// 1. Stop Media Push (GCP)
 	if s.relay.GCPRelayEnabled && gcpSID != "" {
+		log.Printf("[stop] 1/6 stopping media push to GCP (sid=%s)", gcpSID)
 		if err := s.agoraMediaPush.StopMediaPush(ctx, gcpSID); err != nil {
-			log.Printf("ERROR: stop media push (GCP) failed: %v", err)
+			log.Printf("[stop] 1/6 ERROR: stop media push (GCP) failed: %v", err)
+		} else {
+			log.Printf("[stop] 1/6 media push (GCP) stopped")
 		}
+	} else {
+		log.Printf("[stop] 1/6 skip — GCP media push not active")
 	}
 
 	// 2. Stop Media Push (YouTube)
 	if s.relay.YouTubeRelayEnabled && ytSID != "" {
+		log.Printf("[stop] 2/6 stopping media push to YouTube (sid=%s)", ytSID)
 		if err := s.agoraMediaPush.StopMediaPush(ctx, ytSID); err != nil {
-			log.Printf("ERROR: stop media push (YouTube) failed: %v", err)
+			log.Printf("[stop] 2/6 ERROR: stop media push (YouTube) failed: %v", err)
+		} else {
+			log.Printf("[stop] 2/6 media push (YouTube) stopped")
 		}
+	} else {
+		log.Printf("[stop] 2/6 skip — YouTube media push not active")
 	}
 
 	// 3. Transition YouTube broadcast to complete
 	if s.relay.YouTubeRelayEnabled && broadcastID != "" {
+		log.Printf("[stop] 3/6 transitioning YouTube broadcast %s to complete", broadcastID)
 		if err := s.youtube.TransitionBroadcast(ctx, broadcastID, "complete"); err != nil {
-			log.Printf("ERROR: youtube transition to complete failed: %v", err)
+			log.Printf("[stop] 3/6 ERROR: youtube transition to complete failed: %v", err)
+		} else {
+			log.Printf("[stop] 3/6 YouTube broadcast transitioned to complete")
 		}
+	} else {
+		log.Printf("[stop] 3/6 skip — YouTube broadcast not active")
 	}
 
 	// 4. Stop GCP channel
 	if s.relay.GCPRelayEnabled && channelID != "" {
+		log.Printf("[stop] 4/6 stopping GCP channel %s", channelID)
 		if err := s.gcp.StopChannel(ctx, channelID); err != nil {
-			log.Printf("ERROR: stop GCP channel failed: %v", err)
+			log.Printf("[stop] 4/6 ERROR: stop GCP channel failed: %v", err)
+		} else {
+			log.Printf("[stop] 4/6 GCP channel stopped")
 		}
+	} else {
+		log.Printf("[stop] 4/6 skip — GCP channel not active")
 	}
 
 	// 5. Delete GCP channel
 	if s.relay.GCPRelayEnabled && channelID != "" {
+		log.Printf("[stop] 5/6 deleting GCP channel %s", channelID)
 		if err := s.gcp.DeleteChannel(ctx, channelID); err != nil {
-			log.Printf("ERROR: delete GCP channel failed: %v", err)
+			log.Printf("[stop] 5/6 ERROR: delete GCP channel failed: %v", err)
+		} else {
+			log.Printf("[stop] 5/6 GCP channel deleted")
 		}
+	} else {
+		log.Printf("[stop] 5/6 skip — GCP channel not active")
 	}
 
 	// 6. Delete GCP input
 	if s.relay.GCPRelayEnabled && inputID != "" {
+		log.Printf("[stop] 6/6 deleting GCP input %s", inputID)
 		if err := s.gcp.DeleteInput(ctx, inputID); err != nil {
-			log.Printf("ERROR: delete GCP input failed: %v", err)
+			log.Printf("[stop] 6/6 ERROR: delete GCP input failed: %v", err)
+		} else {
+			log.Printf("[stop] 6/6 GCP input deleted")
 		}
+	} else {
+		log.Printf("[stop] 6/6 skip — GCP input not active")
 	}
 
 	// Reset session
@@ -413,7 +460,7 @@ func (s *LiveService) Stop(ctx context.Context) (*model.StopResponse, error) {
 	s.session = &model.Session{State: model.StateIdle}
 	s.mu.Unlock()
 
-	log.Printf("session %s stopped and cleaned up", sessionID)
+	log.Printf("[stop] session %s teardown complete", sessionID)
 
 	return &model.StopResponse{
 		SessionID: sessionID,
