@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
@@ -62,6 +63,9 @@ func (p *youtubeProvider) CreateBroadcast(ctx context.Context, title string) (st
 	broadcast := &youtube.LiveBroadcast{
 		Snippet: &youtube.LiveBroadcastSnippet{
 			Title: title,
+			// ScheduledStartTime is required by the YouTube API.
+			// Set to now so the broadcast is immediately ready to go live.
+			ScheduledStartTime: time.Now().UTC().Format(time.RFC3339),
 		},
 		ContentDetails: &youtube.LiveBroadcastContentDetails{
 			EnableAutoStart:   true,
