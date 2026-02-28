@@ -29,7 +29,8 @@ type RelayOptions struct {
 type LiveService struct {
 	mu sync.Mutex
 
-	session *model.Session
+	session     *model.Session
+	allocCancel context.CancelFunc // cancels in-flight allocateResources; nil when idle
 
 	relay RelayOptions
 
@@ -98,10 +99,24 @@ func (s *LiveService) Prepare(ctx context.Context) (*model.PrepareResponse, erro
 }
 
 // allocateResources creates GCP and YouTube resources in parallel.
+// It is always launched as a goroutine by Prepare.
+// If Stop is called mid-flight, allocCancel is invoked, which causes all
+// in-flight provider calls to return early; this function then performs
+// a best-effort cleanup of any resources that were already created.
 func (s *LiveService) allocateResources(sessionID string) {
 	log.Printf("[prepare] starting resource allocation for session %s", sessionID)
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
-	defer cancel()
+
+	s.mu.Lock()
+	s.allocCancel = cancel
+	s.mu.Unlock()
+
+	defer func() {
+		cancel()
+		s.mu.Lock()
+		s.allocCancel = nil
+		s.mu.Unlock()
+	}()
 
 	inputID := fmt.Sprintf("input-%s", sessionID)
 	channelID := fmt.Sprintf("channel-%s", sessionID)
@@ -189,13 +204,44 @@ func (s *LiveService) allocateResources(sessionID string) {
 	log.Printf("[prepare] resource allocation finished for session %s", sessionID)
 
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	sessionChanged := s.session.ID != sessionID
+	stateStopping := s.session.State == model.StateStopping
+	s.mu.Unlock()
 
-	// Check session hasn't been reset while we were allocating
-	if s.session.ID != sessionID {
-		log.Printf("session changed during allocation, discarding results for %s", sessionID)
+	// If Stop was called while we were allocating, clean up any partial resources
+	// using a fresh context (the original ctx may already be cancelled).
+	if sessionChanged || stateStopping {
+		log.Printf("[prepare] session %s was interrupted mid-allocation, cleaning up partial resources", sessionID)
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cleanupCancel()
+		if s.relay.GCPRelayEnabled {
+			// Attempt stop+delete even if only partially created; 404s are ignored by the provider.
+			if err := s.gcp.StopChannel(cleanupCtx, channelID); err != nil {
+				log.Printf("[prepare] cleanup: stop channel: %v", err)
+			}
+			if err := s.gcp.DeleteChannel(cleanupCtx, channelID); err != nil {
+				log.Printf("[prepare] cleanup: delete channel: %v", err)
+			}
+			if err := s.gcp.DeleteInput(cleanupCtx, inputID); err != nil {
+				log.Printf("[prepare] cleanup: delete input: %v", err)
+			}
+		}
+		if s.relay.YouTubeRelayEnabled && broadcastID != "" {
+			if err := s.youtube.TransitionBroadcast(cleanupCtx, broadcastID, "complete"); err != nil {
+				log.Printf("[prepare] cleanup: youtube transition: %v", err)
+			}
+		}
+		s.mu.Lock()
+		if s.session.ID == sessionID {
+			s.session = &model.Session{State: model.StateIdle}
+		}
+		s.mu.Unlock()
+		log.Printf("[prepare] cleanup complete for interrupted session %s", sessionID)
 		return
 	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	if gcpErr != nil {
 		log.Printf("ERROR: resource allocation failed (GCP): %v", gcpErr)
@@ -379,6 +425,12 @@ func (s *LiveService) Stop(ctx context.Context) (*model.StopResponse, error) {
 	broadcastID := s.session.YouTubeBroadcastID
 	channelID := s.session.GCPChannelID
 	inputID := s.session.GCPInputID
+	// If allocation is still in progress, cancel it so the goroutine returns early
+	// and performs its own partial-resource cleanup.
+	if s.allocCancel != nil {
+		log.Printf("[stop] cancelling in-flight resource allocation for session %s", sessionID)
+		s.allocCancel()
+	}
 	s.mu.Unlock()
 
 	log.Printf("[stop] beginning teardown for session %s", sessionID)

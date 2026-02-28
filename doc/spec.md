@@ -60,6 +60,7 @@ stateDiagram-v2
     idle --> preparing : POST /v1/live/prepare
     preparing --> ready : GCP + YouTube 資源就緒（非同步，約 30-60s）
     preparing --> idle : 資源分配失敗
+    preparing --> stopping : POST /v1/live/stop（中途取消）
     ready --> live : Agora NCS Webhook (eventType=103)
     live --> stopping : POST /v1/live/stop
     stopping --> idle : 清理完成
@@ -195,6 +196,40 @@ sequenceDiagram
 ```
 
 > **容錯**：Stop 流程每一步驟失敗只 log，不中斷後續清理，確保 GCP 資源完整釋放（GCP 按時段計費）。
+
+#### Preparing 中途收到 Stop
+
+`POST /v1/live/stop` 可在任意狀態下呼叫，包括仍在 `preparing` 的過程中。此時後端的處理機制如下：
+
+1. `Stop` 設定 session state 為 `stopping`，並呼叫 `allocCancel()` 取消 allocation goroutine 的 context。
+2. 進行中的 GCP/YouTube API 呼叫因 context 被取消而提前返回 error，`wg.Wait()` 解除阻塞。
+3. `allocateResources` goroutine 偵測到 `stateStopping == true`，進入 **partial resource cleanup** 分支：
+   - 使用全新的 60s context（原始 ctx 已被取消）
+   - 嘗試 `StopChannel` → `DeleteChannel` → `DeleteInput`（若資源不存在，GCP 回 404，log 後繼續）
+   - 若 YouTube broadcast 已建立，呼叫 `TransitionBroadcast("complete")`
+4. 清理完成後 session reset 為 `idle`。
+
+```mermaid
+sequenceDiagram
+    actor Streamer as 推流端
+    participant API as DeltaCast API
+    participant GCP as GCP Live Stream API
+
+    Streamer->>API: POST /v1/live/prepare
+    Note over API: state → preparing，背景執行 allocateResources
+    API->>GCP: CreateInput（進行中）
+
+    Streamer->>API: POST /v1/live/stop
+    Note over API: state → stopping，呼叫 allocCancel()
+    Note over API: allocateResources ctx 被取消，API 呼叫提前返回
+
+    Note over API: 偵測到 stateStopping，進入 partial cleanup
+    API->>GCP: StopChannel（best-effort，404 可忽略）
+    API->>GCP: DeleteChannel
+    API->>GCP: DeleteInput
+    Note over API: state → idle
+    API-->>Streamer: { state: "idle" }
+```
 
 ### 3.5 API 端點總覽
 
