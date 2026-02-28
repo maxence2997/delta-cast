@@ -34,8 +34,8 @@ delta-cast/
 ├── shared/                     # 存放 Proto 定義或統一的轉碼參數 JSON（若有）
 ├── .github/                    # GitHub Actions 自動化腳本
 │   └── workflows/
-│       ├── deploy-server.yml   # 後端部署腳本
-│       ├── deploy-web.yml      # 前端部署腳本
+│       ├── backed-workflow.yml # 後端 CI/CD（測試 → Build & Push image 至 GHCR）
+│       ├── deploy-web.yml      # 前端部署腳本（未來）
 │       ├── deploy-ios.yml      # iOS 部署腳本（未來）
 │       └── deploy-android.yml  # Android 部署腳本（未來）
 ├── docker-compose.yml          # 本地一次性啟動所有服務進行整合測試

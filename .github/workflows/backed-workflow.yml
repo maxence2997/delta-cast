@@ -1,17 +1,47 @@
-name: Build and Push Backend Server Image
+name: Backend CI/CD Pipeline
 
 on:
   push:
+    branches: [ main ]
+    paths:
+      - 'server/**'
+      - 'Makefile'
+      - '.github/workflows/backed-workflow.yml'
     tags:
-      # 觸發條件：推送符合 v1.0.0 格式的 tag
-      - 'v[0-9]+.[0-9]+.[0-9]+' 
-
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'server/**'
+      - 'Makefile'
+      - '.github/workflows/backed-workflow.yml'
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
+  # 測試 Job：無論是 Push 或 Tag 都會執行
+  test-server:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+
+      - name: Run server tests
+        run: cd server && go test -race ./...
+
+  # 編譯與推送 Job：只有在符合 Tag 格式時才執行
   build-and-push-image:
+    # 這裡確保測試通過才跑 build
+    needs: [test-server]
+    # 關鍵條件：判斷當前的 ref 是否為 tag
+    if: startsWith(github.ref, 'refs/tags/v')
     environment: railway-demo
     runs-on: ubuntu-latest
     permissions:
@@ -32,13 +62,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata (tags, labels) for Docker
+      - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          # 取出 tag 數字：將 v1.0.0 透過 Regex 擷取 Group 1 變成 1.0.0
-          # 同時也加上 latest 這個 tag，讓 Railway 永遠指向最新的版本
           tags: |
             type=match,pattern=v(.*),group=1
             type=raw,value=latest

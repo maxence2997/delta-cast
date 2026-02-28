@@ -165,6 +165,12 @@ make res-close        # 鎖定所有外部存取
 | [doc/setup/gcp-setup.md](doc/setup/gcp-setup.md)                               | GCP 資源建立步驟                |
 | [doc/setup/youtube-setup.md](doc/setup/youtube-setup.md)                       | YouTube Data API 與直播設定步驟 |
 
+### CI/CD
+
+| 檔案                                                                           | 說明                                          |
+| ------------------------------------------------------------------------------ | --------------------------------------------- |
+| [.github/workflows/backed-workflow.yml](.github/workflows/backed-workflow.yml) | 後端 CI/CD：測試 → Build & Push image 至 GHCR |
+
 ---
 
 ## 專案狀態
