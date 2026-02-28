@@ -49,13 +49,13 @@ docker-compose -f docker-compose.local.yml up
 
 ## Critical Rules
 
-1. **Read before write** — always read `doc/spec.md`, `doc/instruction.md`, `doc/api.md`, and the target file fully before editing.
+1. **Read before write** — always read `doc/spec.md`, `doc/instruction.md`, `doc/api/api.md`, and the target file fully before editing.
 2. **Minimal changes** — one concern per edit; no drive-by refactors.
 3. **No hardcoded secrets** — all API keys/secrets via environment variables (see `server/.env.example`, `script/.env.example` and `web/.env.example`), and the secrets must never be committed to version control.
 4. **Resource cleanup is critical** — GCP resources are billed per-time. The stop flow must attempt every cleanup step even if earlier steps fail (log error, continue).
 5. **Idempotent webhook handling** — Agora NCS may send duplicate events; guard with session state checks.
 6. **Single active session** — POC supports one session at a time. Duplicate `start` returns existing session, not a new one.
 7. **Task tracking** — when completing items related to [doc/task-tracking.md](../doc/task-tracking.md), update the checkboxes there.
-8. **Documentation** — update `doc/spec.md`, `doc/instruction.md`, `doc/api.md`, `README.md` with any design changes or new implementation details.
+8. **Documentation** — update `doc/spec.md`, `doc/instruction.md`, `doc/api/api.md`, `README.md` with any design changes or new implementation details.
 9. **Accuracy** — if you have questions or need clarification, ask in the project chat or create an issue. Do not make assumptions without confirming.
 10. **Language Consistency** — When the user provides prompts or questions in Traditional Chinese, always respond in Traditional Chinese; otherwise, respond in English. This ensures clear communication and maintains consistency throughout the project.

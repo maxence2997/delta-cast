@@ -132,7 +132,7 @@ make web-dev    # 僅啟動前端 (port 3000)
 | `GET`  | `/v1/live/status`   | JWT        | 查詢 Session 狀態與播放 URL       |
 | `POST` | `/v1/webhook/agora` | Agora 簽章 | Agora NCS 回呼（觸發 Media Push） |
 
-詳細請求 / 回應格式見 [doc/api.md](doc/api.md)。
+詳細請求 / 回應格式見 [doc/api/api.md](doc/api/api.md)。
 
 ---
 
@@ -156,7 +156,7 @@ make res-close        # 鎖定所有外部存取
 | ------------------------------------------------------------------------------ | ------------------------------- |
 | [doc/spec.md](doc/spec.md)                                                     | 系統架構規格與技術決策          |
 | [doc/instruction.md](doc/instruction.md)                                       | 實作細節與開發指引              |
-| [doc/api.md](doc/api.md)                                                       | API 端點詳細規格                |
+| [doc/api/api.md](doc/api/api.md)                                               | API 端點詳細規格                |
 | [doc/task-tracking.md](doc/task-tracking.md)                                   | 任務進度追蹤                    |
 | [doc/agora/media-push-rest-api.md](doc/agora/media-push-rest-api.md)           | Agora Media Push REST API 參考  |
 | [doc/agora/media-push-notifications.md](doc/agora/media-push-notifications.md) | Agora NCS 通知事件說明          |

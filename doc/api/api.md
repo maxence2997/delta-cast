@@ -1,6 +1,6 @@
 # DeltaCast API 文件
 
-> 系統架構、Session 狀態機與完整流程圖見 [`doc/spec.md`](spec.md) 第 3 節。
+> 系統架構、Session 狀態機與完整流程圖見 [`doc/spec.md`](../spec.md) 第 3 節。
 
 ---
 

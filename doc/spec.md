@@ -144,7 +144,7 @@ sequenceDiagram
 
 收播端不需要呼叫 `prepare` / `start` / `stop`，只需輪詢 `GET /v1/live/status`。因為 POC 是單一 Session，不需要房間選擇邏輯。
 
-`gcpPlaybackUrl` 與 `youtubeWatchUrl` 從 `ready` 狀態起即填入，但只有 `live` 狀態才有實際串流內容。各狀態下的欄位可用性詳見 [`doc/api.md`](api.md) 的 `GET /v1/live/status` 章節。
+`gcpPlaybackUrl` 與 `youtubeWatchUrl` 從 `ready` 狀態起即填入，但只有 `live` 狀態才有實際串流內容。各狀態下的欄位可用性詳見 [`doc/api/api.md`](api/api.md) 的 `GET /v1/live/status` 章節。
 
 ```mermaid
 sequenceDiagram
@@ -207,7 +207,7 @@ sequenceDiagram
 | POST   | `/v1/webhook/agora/channel`    | Agora RTC Channel NCS（無需 JWT，Agora 簽章驗證） |
 | POST   | `/v1/webhook/agora/media-push` | Agora Media Push NCS（無需 JWT，Agora 簽章驗證）  |
 
-詳細 request/response 規格見 [`doc/api.md`](api.md)。
+詳細 request/response 規格見 [`doc/api/api.md`](api/api.md)。
 
 ---
 

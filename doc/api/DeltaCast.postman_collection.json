@@ -1,0 +1,419 @@
+{
+  "info": {
+    "name": "DeltaCast API",
+    "description": "DeltaCast 直播轉發系統 API Collection。\n\n**使用前設定：**\n1. 在 Collection Variables 填入 `base_url`、`jwt_token`\n2. Webhook 測試需另外填入 `agora_channel_ncs_secret` / `agora_media_push_ncs_secret` 以簽發 `Agora-Signature`",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8080",
+      "type": "string"
+    },
+    {
+      "key": "jwt_token",
+      "value": "<YOUR_JWT_TOKEN>",
+      "type": "string"
+    },
+    {
+      "key": "session_id",
+      "value": "",
+      "type": "string",
+      "description": "由 prepare / status 自動填入"
+    }
+  ],
+  "item": [
+    {
+      "name": "Live",
+      "description": "直播生命週期管理（需 JWT Bearer Token）",
+      "item": [
+        {
+          "name": "Prepare",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.sessionId) {",
+                  "  pm.collectionVariables.set('session_id', json.sessionId);",
+                  "  console.log('session_id saved:', json.sessionId);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/live/prepare",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "live", "prepare"]
+            },
+            "description": "預熱 GCP 與 YouTube 資源。立即回傳，資源分配在背景非同步執行（約 30–60 秒）。\n\n成功後 `session_id` 會自動存入 Collection Variable，供後續請求使用。\n\n**後台並行任務：**\n- GCP: CreateInput → CreateChannel → StartChannel → WaitForChannelReady\n- YouTube: CreateBroadcast → CreateStream → BindBroadcastToStream\n\n完成後 Session 狀態轉為 `ready`；失敗則回到 `idle`。"
+          },
+          "response": [
+            {
+              "name": "200 — 新建 Session",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                { "key": "Content-Type", "value": "application/json" }
+              ],
+              "body": "{\n  \"sessionId\": \"a1b2c3d4\",\n  \"state\": \"preparing\",\n  \"message\": \"resource allocation started, poll /v1/live/status for updates\"\n}"
+            },
+            {
+              "name": "200 — Session 已存在",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                { "key": "Content-Type", "value": "application/json" }
+              ],
+              "body": "{\n  \"sessionId\": \"a1b2c3d4\",\n  \"state\": \"ready\",\n  \"message\": \"session already exists\"\n}"
+            },
+            {
+              "name": "500 — 失敗",
+              "status": "Internal Server Error",
+              "code": 500,
+              "header": [
+                { "key": "Content-Type", "value": "application/json" }
+              ],
+              "body": "{\n  \"error\": \"prepare_failed\",\n  \"message\": \"<錯誤描述>\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Status (Poll)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.sessionId) {",
+                  "  pm.collectionVariables.set('session_id', json.sessionId);",
+                  "}",
+                  "pm.test('Response is 200', function() {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "console.log('state:', json.state);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/live/status",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "live", "status"]
+            },
+            "description": "查詢當前 Session 狀態與播放 URL。\n\n**各狀態欄位可用性：**\n| 狀態 | gcpPlaybackUrl | youtubeWatchUrl |\n|---|---|---|\n| idle | 省略 | 省略 |\n| preparing | 省略 | 省略 |\n| ready | ✓ | ✓ |\n| live | ✓ | ✓ |\n| stopping | ✓ | ✓ |"
+          },
+          "response": [
+            {
+              "name": "200 — Live 狀態",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                { "key": "Content-Type", "value": "application/json" }
+              ],
+              "body": "{\n  \"sessionId\": \"a1b2c3d4\",\n  \"state\": \"live\",\n  \"gcpPlaybackUrl\": \"https://<cdn-domain>/channel-a1b2c3d4/main.m3u8\",\n  \"youtubeWatchUrl\": \"https://www.youtube.com/watch?v=<broadcastId>\"\n}"
+            },
+            {
+              "name": "200 — Preparing 狀態",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                { "key": "Content-Type", "value": "application/json" }
+              ],
+              "body": "{\n  \"sessionId\": \"a1b2c3d4\",\n  \"state\": \"preparing\"\n}"
+            },
+            {
+              "name": "200 — Idle（無 Session）",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                { "key": "Content-Type", "value": "application/json" }
+              ],
+              "body": "{\n  \"sessionId\": \"\",\n  \"state\": \"idle\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Start",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/live/start",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "live", "start"]
+            },
+            "description": "取得 Agora RTC Token。Session 必須為 `ready` 狀態（先透過 Status 輪詢確認）。\n\n**重要**：此端點不改變 Session 狀態。前端使用回傳的 Token 加入 Agora 頻道並推流後，Agora NCS Webhook（eventType=103）才會觸發後端將狀態轉為 `live`。\n\n- Token TTL：86400 秒（24 小時）\n- `agoraUid` 固定為 `0`"
+          },
+          "response": [
+            {
+              "name": "200 — 成功",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                { "key": "Content-Type", "value": "application/json" }
+              ],
+              "body": "{\n  \"sessionId\": \"a1b2c3d4\",\n  \"agoraAppId\": \"your-agora-app-id\",\n  \"agoraChannel\": \"deltacast-a1b2c3d4\",\n  \"agoraToken\": \"<Dynamic RTC Token>\",\n  \"agoraUid\": 0\n}"
+            },
+            {
+              "name": "400 — Session 狀態不符",
+              "status": "Bad Request",
+              "code": 400,
+              "header": [
+                { "key": "Content-Type", "value": "application/json" }
+              ],
+              "body": "{\n  \"error\": \"start_failed\",\n  \"message\": \"session is in preparing state, must be ready to start\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Stop",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/live/stop",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "live", "stop"]
+            },
+            "description": "停止直播並依序釋放所有資源。各步驟失敗只 log，不中斷後續清理。\n\n**清理順序：**\n1. 停止 Agora Media Push（GCP 目標）\n2. 停止 Agora Media Push（YouTube 目標）\n3. YouTube Broadcast 轉為 `complete`\n4. 停止 GCP Channel\n5. 刪除 GCP Channel\n6. 刪除 GCP Input\n7. Session 狀態重設為 `idle`\n\n⚠️ GCP 資源按時段計費，請確實呼叫 Stop 釋放資源。"
+          },
+          "response": [
+            {
+              "name": "200 — 正常停止",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                { "key": "Content-Type", "value": "application/json" }
+              ],
+              "body": "{\n  \"sessionId\": \"a1b2c3d4\",\n  \"state\": \"idle\",\n  \"message\": \"session stopped, all resources cleaned up\"\n}"
+            },
+            {
+              "name": "200 — 無活躍 Session",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                { "key": "Content-Type", "value": "application/json" }
+              ],
+              "body": "{\n  \"sessionId\": \"\",\n  \"state\": \"idle\",\n  \"message\": \"no active session\"\n}"
+            },
+            {
+              "name": "500 — 失敗",
+              "status": "Internal Server Error",
+              "code": 500,
+              "header": [
+                { "key": "Content-Type", "value": "application/json" }
+              ],
+              "body": "{\n  \"error\": \"stop_failed\",\n  \"message\": \"<錯誤描述>\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Webhook",
+      "description": "Agora NCS Webhook（無 JWT，使用 Agora-Signature HMAC/SHA1 驗證）",
+      "item": [
+        {
+          "name": "Agora Channel Event (NCS)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Agora-Signature",
+                "value": "<hmac-sha1-hex>",
+                "description": "HMAC/SHA1 簽章，對應 AGORA_CHANNEL_NCS_SECRET"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"noticeId\": \"abc123\",\n  \"productId\": 1,\n  \"eventType\": 103,\n  \"payload\": {\n    \"uid\": 12345\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/webhook/agora/channel",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "webhook", "agora", "channel"]
+            },
+            "description": "接收 Agora RTC Channel 事件（NCS，productId=1）。\n\n**只處理 eventType=103**（主播加入頻道），其他 eventType 回傳 200 並忽略。\n\n**eventType 對照：**\n| eventType | 說明 |\n|---|---|\n| 101 | 頻道建立 |\n| 102 | 頻道銷毀 |\n| **103** | **主播加入頻道（觸發 Media Push）** |\n| 104 | 主播離開頻道 |\n\n**收到 103 後觸發：**\n- 啟動 Agora Media Push → GCP RTMP\n- 啟動 Agora Media Push → YouTube RTMP\n- YouTube Broadcast 轉為 `live`\n- Session 狀態轉為 `live`\n\n**冪等保護**：若 Session 已為 `live`，忽略重複事件。"
+          },
+          "response": [
+            {
+              "name": "200 — OK",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                { "key": "Content-Type", "value": "application/json" }
+              ],
+              "body": "{ \"status\": \"ok\" }"
+            },
+            {
+              "name": "401 — 簽章驗證失敗",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                { "key": "Content-Type", "value": "application/json" }
+              ],
+              "body": "{\n  \"error\": \"unauthorized\",\n  \"message\": \"invalid webhook signature\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Agora Channel Event — eventType 101 (建立，忽略)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Agora-Signature",
+                "value": "<hmac-sha1-hex>"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"noticeId\": \"abc001\",\n  \"productId\": 1,\n  \"eventType\": 101,\n  \"payload\": {}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/webhook/agora/channel",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "webhook", "agora", "channel"]
+            },
+            "description": "測試非 103 eventType，後端應回傳 200 並忽略。"
+          },
+          "response": []
+        },
+        {
+          "name": "Agora Media Push Event (NCS)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Agora-Signature",
+                "value": "<hmac-sha1-hex>",
+                "description": "HMAC/SHA1 簽章，對應 AGORA_MEDIA_PUSH_NCS_SECRET"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"noticeId\": \"abc456\",\n  \"productId\": 5,\n  \"eventType\": 3,\n  \"payload\": {\n    \"converter\": {\n      \"id\": \"converter-id-xxx\",\n      \"state\": \"running\"\n    },\n    \"destroyReason\": \"\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/webhook/agora/media-push",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "webhook", "agora", "media-push"]
+            },
+            "description": "接收 Agora Media Push 事件（NCS，productId=5）。目前僅做 log，不觸發額外狀態變更。\n\n**eventType 對照：**\n| eventType | 說明 |\n|---|---|\n| 1 | Converter 已建立 |\n| 2 | Converter 設定變更 |\n| **3** | **Converter 狀態變更（running / failed）** |\n| 4 | Converter 已銷毀（destroyReason 填原因）|\n\n**converter.state 值：**\n- `running` — 正常轉發中\n- `failed` — 轉發失敗"
+          },
+          "response": [
+            {
+              "name": "200 — OK",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                { "key": "Content-Type", "value": "application/json" }
+              ],
+              "body": "{ \"status\": \"ok\" }"
+            },
+            {
+              "name": "401 — 簽章驗證失敗",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                { "key": "Content-Type", "value": "application/json" }
+              ],
+              "body": "{\n  \"error\": \"unauthorized\",\n  \"message\": \"invalid webhook signature\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Agora Media Push Event — Converter Destroyed",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Agora-Signature",
+                "value": "<hmac-sha1-hex>"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"noticeId\": \"abc789\",\n  \"productId\": 5,\n  \"eventType\": 4,\n  \"payload\": {\n    \"converter\": {\n      \"id\": \"converter-id-xxx\",\n      \"state\": \"idle\"\n    },\n    \"destroyReason\": \"stop\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/webhook/agora/media-push",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "webhook", "agora", "media-push"]
+            },
+            "description": "測試 eventType=4（Converter 已銷毀）。"
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
