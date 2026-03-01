@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -20,8 +21,8 @@ func (m *mockAgoraToken) GenerateRTCToken(channelName string, uid uint32, ttl ui
 
 type mockAgoraMediaPush struct {
 	startCount int
-	stopCount  int
-	listCount  int
+	stopCount  atomic.Int32
+	listCount  atomic.Int32
 	startErr   error
 	listResult []provider.ConverterInfo
 	listErr    error
@@ -36,12 +37,12 @@ func (m *mockAgoraMediaPush) StartMediaPush(ctx context.Context, name string, ch
 }
 
 func (m *mockAgoraMediaPush) StopMediaPush(ctx context.Context, converterID string) error {
-	m.stopCount++
+	m.stopCount.Add(1)
 	return nil
 }
 
 func (m *mockAgoraMediaPush) ListConvertersByChannel(ctx context.Context, channelName string) ([]provider.ConverterInfo, error) {
-	m.listCount++
+	m.listCount.Add(1)
 	return m.listResult, m.listErr
 }
 
@@ -311,8 +312,8 @@ func TestStop_CleansUpAllResources(t *testing.T) {
 	if resp.State != model.StateIdle {
 		t.Errorf("expected state idle after stop, got %s", resp.State)
 	}
-	if pushProv.stopCount != 2 {
-		t.Errorf("expected 2 media push stops, got %d", pushProv.stopCount)
+	if pushProv.stopCount.Load() != 2 {
+		t.Errorf("expected 2 media push stops, got %d", pushProv.stopCount.Load())
 	}
 	if !gcpProv.stopChannelCalled {
 		t.Error("expected GCP StopChannel to be called")
@@ -476,8 +477,7 @@ func TestHandleChannelWebhook_Event103DuringPreparing_ProcessedAfterReady(t *tes
 func TestHandleChannelWebhook_Rollback_StopsSuccessfulConverter(t *testing.T) {
 	svc, _, _, _ := newTestService()
 
-	stopCount := 0
-	failSecond := &mockAgoraMediaPushFailSecond{stopCount: &stopCount}
+	failSecond := &mockAgoraMediaPushFailSecond{}
 	svc.agoraMediaPush = failSecond
 
 	svc.session.ID = "test-session"
@@ -498,7 +498,7 @@ func TestHandleChannelWebhook_Rollback_StopsSuccessfulConverter(t *testing.T) {
 	// Wait briefly for the rollback goroutine to run.
 	time.Sleep(50 * time.Millisecond)
 
-	if stopCount == 0 {
+	if failSecond.stopCount.Load() == 0 {
 		t.Error("expected StopMediaPush to be called for the successfully created GCP converter")
 	}
 }
@@ -506,7 +506,7 @@ func TestHandleChannelWebhook_Rollback_StopsSuccessfulConverter(t *testing.T) {
 // mockAgoraMediaPushFailSecond succeeds on the first StartMediaPush call and fails on the second.
 type mockAgoraMediaPushFailSecond struct {
 	callCount int
-	stopCount *int
+	stopCount atomic.Int32
 	listCount int
 }
 
@@ -519,7 +519,7 @@ func (m *mockAgoraMediaPushFailSecond) StartMediaPush(_ context.Context, name, _
 }
 
 func (m *mockAgoraMediaPushFailSecond) StopMediaPush(_ context.Context, _ string) error {
-	*m.stopCount++
+	m.stopCount.Add(1)
 	return nil
 }
 
@@ -561,11 +561,11 @@ func TestHandleChannelWebhook_Rollback_ListsOrphanedConverters(t *testing.T) {
 	// Wait briefly for the rollback goroutine to run.
 	time.Sleep(50 * time.Millisecond)
 
-	if orphanPush.listCount == 0 {
+	if orphanPush.listCount.Load() == 0 {
 		t.Error("expected ListConvertersByChannel to be called for orphan cleanup")
 	}
 	// Both orphaned converters should have been stopped.
-	if orphanPush.stopCount != 2 {
-		t.Errorf("expected 2 StopMediaPush calls for orphaned converters, got %d", orphanPush.stopCount)
+	if orphanPush.stopCount.Load() != 2 {
+		t.Errorf("expected 2 StopMediaPush calls for orphaned converters, got %d", orphanPush.stopCount.Load())
 	}
 }
