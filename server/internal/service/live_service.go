@@ -300,15 +300,26 @@ func (s *LiveService) HandleMediaPushWebhook(_ context.Context, eventType int, c
 
 // HandleChannelWebhook processes Agora RTC Channel NCS events (productId=1).
 // For event 103 (broadcaster joins channel), it triggers Media Push to both targets.
-// uid is the broadcaster's Agora RTC UID extracted from the NCS payload.
-func (s *LiveService) HandleChannelWebhook(ctx context.Context, eventType int, uid uint32) error {
-	// Only handle event 103 (broadcaster join channel)
+// uid is the broadcaster's Agora RTC UID, channelName is the Agora channel from the NCS payload,
+// and clientSeq is the sequence number used for deduplication (0 if unavailable).
+func (s *LiveService) HandleChannelWebhook(ctx context.Context, eventType int, uid uint32, channelName string, clientSeq int64) error {
+	// Only event 103 (broadcaster join) triggers business logic.
+	// All other events are logged for observability and acknowledged with 200 OK.
 	if eventType != 103 {
-		logger.Infof("ignoring agora event type %d", eventType)
+		logger.Infof("received agora channel event %d: channel=%q uid=%d clientSeq=%d (no action taken)", eventType, channelName, uid, clientSeq)
 		return nil
 	}
 
 	s.mu.Lock()
+
+	// Validate channel name: reject events for a different channel.
+	// The NCS health check uses channelName="test_webhook" while the session is idle,
+	// so we only validate when the session has an assigned channel.
+	if channelName != "" && s.session.AgoraChannel != "" && channelName != s.session.AgoraChannel {
+		s.mu.Unlock()
+		logger.Warnf("ignoring channel webhook for unexpected channel %q (expected %q)", channelName, s.session.AgoraChannel)
+		return nil
+	}
 
 	// Idempotent: if already live, skip
 	if s.session.State == model.StateLive {
@@ -327,8 +338,18 @@ func (s *LiveService) HandleChannelWebhook(ctx context.Context, eventType int, u
 		return nil
 	}
 
+	// clientSeq deduplication: ignore replays with the same or older sequence number.
+	if clientSeq > 0 && clientSeq <= s.session.LastBroadcasterClientSeq {
+		s.mu.Unlock()
+		logger.Infof("ignoring duplicate broadcaster-join event (clientSeq %d ≤ last %d)", clientSeq, s.session.LastBroadcasterClientSeq)
+		return nil
+	}
+	if clientSeq > 0 {
+		s.session.LastBroadcasterClientSeq = clientSeq
+	}
+
 	s.session.State = model.StateLive
-	channelName := s.session.AgoraChannel
+	channelName = s.session.AgoraChannel
 	gcpRTMPURL := s.session.GCPInputURI
 	ytRTMPURL := s.session.YouTubeRTMPURL
 	broadcastID := s.session.YouTubeBroadcastID

@@ -191,7 +191,7 @@ func TestHandleChannelWebhook_BroadcasterJoin_MovesToLive(t *testing.T) {
 	svc.session.YouTubeRTMPURL = "rtmp://yt"
 	svc.session.YouTubeBroadcastID = "bc-123"
 
-	err := svc.HandleChannelWebhook(context.Background(), 103, 12345)
+	err := svc.HandleChannelWebhook(context.Background(), 103, 12345, "ch", 1000)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -211,7 +211,7 @@ func TestHandleChannelWebhook_Idempotent(t *testing.T) {
 	svc.session.State = model.StateLive
 	svc.session.AgoraChannel = "ch"
 
-	err := svc.HandleChannelWebhook(context.Background(), 103, 12345)
+	err := svc.HandleChannelWebhook(context.Background(), 103, 12345, "ch", 1000)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -221,12 +221,53 @@ func TestHandleChannelWebhook_Idempotent(t *testing.T) {
 	}
 }
 
+func TestHandleChannelWebhook_DuplicateClientSeq(t *testing.T) {
+	svc, pushProv, _, _ := newTestService()
+
+	svc.session.ID = "test-session"
+	svc.session.State = model.StateReady
+	svc.session.AgoraChannel = "ch"
+	svc.session.GCPInputURI = "rtmp://gcp"
+	svc.session.YouTubeRTMPURL = "rtmp://yt"
+	svc.session.LastBroadcasterClientSeq = 1000
+
+	// Replayed event with same clientSeq — should be ignored even in StateReady.
+	err := svc.HandleChannelWebhook(context.Background(), 103, 12345, "ch", 1000)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if pushProv.startCount != 0 {
+		t.Errorf("expected 0 media push starts for replayed clientSeq, got %d", pushProv.startCount)
+	}
+}
+
+func TestHandleChannelWebhook_WrongChannel(t *testing.T) {
+	svc, pushProv, _, _ := newTestService()
+
+	svc.session.ID = "test-session"
+	svc.session.State = model.StateReady
+	svc.session.AgoraChannel = "ch"
+	svc.session.GCPInputURI = "rtmp://gcp"
+	svc.session.YouTubeRTMPURL = "rtmp://yt"
+
+	// Event from a different channel — should be silently ignored.
+	err := svc.HandleChannelWebhook(context.Background(), 103, 12345, "other-channel", 2000)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if pushProv.startCount != 0 {
+		t.Errorf("expected 0 media push starts for wrong channel, got %d", pushProv.startCount)
+	}
+}
+
 func TestHandleWebhook_IgnoresOtherEvents(t *testing.T) {
 	svc, pushProv, _, _ := newTestService()
 
 	svc.session.State = model.StateReady
 
-	err := svc.HandleChannelWebhook(context.Background(), 102, 0)
+	err := svc.HandleChannelWebhook(context.Background(), 102, 0, "", 0)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

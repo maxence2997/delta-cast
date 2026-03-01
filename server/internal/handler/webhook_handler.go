@@ -60,9 +60,11 @@ func readAndVerifyBody(c *gin.Context, verifier agoraNCSVerifier) ([]byte, bool)
 
 // --- RTC Channel Events ---
 
-// rtcChannelEventPayload extracts the broadcaster UID from the RTC Channel NCS event payload.
+// rtcChannelEventPayload extracts fields from the RTC Channel NCS event payload.
 type rtcChannelEventPayload struct {
-	UID uint32 `json:"uid"`
+	UID         uint32 `json:"uid"`
+	ChannelName string `json:"channelName"`
+	ClientSeq   int64  `json:"clientSeq"`
 }
 
 // HandleAgoraChannelEvent handles POST /v1/webhook/agora/channel — RTC Channel Event Callbacks.
@@ -84,7 +86,7 @@ func (h *WebhookHandler) HandleAgoraChannelEvent(c *gin.Context) {
 		_ = json.Unmarshal(envelope.Payload, &eventPayload)
 	}
 
-	if err := h.svc.HandleChannelWebhook(c.Request.Context(), envelope.EventType, eventPayload.UID); err != nil {
+	if err := h.svc.HandleChannelWebhook(c.Request.Context(), envelope.EventType, eventPayload.UID, eventPayload.ChannelName, eventPayload.ClientSeq); err != nil {
 		c.JSON(http.StatusInternalServerError, model.ErrorResponse{Error: "webhook_failed", Message: err.Error()})
 		return
 	}

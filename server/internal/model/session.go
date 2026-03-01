@@ -44,4 +44,8 @@ type Session struct {
 	// Media Push SIDs
 	MediaPushGCPSID     string `json:"mediaPushGcpSid,omitempty"`
 	MediaPushYouTubeSID string `json:"mediaPushYoutubeSid,omitempty"`
+
+	// NCS deduplication — tracks the clientSeq of the last processed broadcaster-join event
+	// (event 103). A later event with an equal or lower clientSeq is a duplicate and is ignored.
+	LastBroadcasterClientSeq int64 `json:"-"`
 }
