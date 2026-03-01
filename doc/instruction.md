@@ -76,14 +76,16 @@ delta-cast/
 
 ### Git 規範
 
-- Commit message 使用 [Conventional Commits](https://www.conventionalcommits.org/) 格式：
-  - `feat:` 新功能
-  - `fix:` 修復
-  - `refactor:` 重構
-  - `doc:` 文件
-  - `chore:` 工具/配置
+Commit message 詳細格式規範請參閱 [.github/commit-message-instructions.md](../.github/commit-message-instructions.md)。
+
+摘要：
+
+- **格式**：`<類型>：<主旨>`（Header），空一行後接數字條列說明（Body，可選）。
+- **Header**：全程使用繁體中文，不超過 50 個字。類型與主旨之間使用全形冒號「：」。
+- **Body**：每列先說明原因，再說明修改內容，每項不超過 50 字，最多三項。
+- **用語**：一律使用「程式碼」，禁止使用「代碼」。
+- **類型**：`feat`、`fix`、`refactor`、`docs`、`style`、`test`、`chore`、`revert`、`merge`、`sync`。
 - 每個 commit 只包含一個邏輯變更，不混合多個不相關修改。
-- Commit message 使用英文撰寫。
 
 ### 測試要求
 

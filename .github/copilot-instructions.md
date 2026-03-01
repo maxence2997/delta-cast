@@ -44,7 +44,7 @@ docker-compose -f docker-compose.local.yml up
 
 - **Go**: `gofmt`/`goimports`, snake_case filenames (`live_service.go`), GoDoc on public functions, `if err != nil` error handling (no panic), secrets from env vars only.
 - **TypeScript/React**: ESLint + Prettier, kebab-case filenames (`live-player.tsx`), functional components + hooks only.
-- **Git**: Adhere to the Conventional Commits specification. Use English for the commit type (e.g., feat:, fix:, refactor:, doc:, chore:), but write the descriptive message in Traditional Chinese. Ensure each commit represents exactly one logical change.
+- **Git**: Follow the commit message rules defined in [.github/commit-message-instructions.md](commit-message-instructions.md). Headers and body must be in Traditional Chinese. Each commit must represent exactly one logical change.
 - **Tests**: Co-located with source (`_test.go` / `.test.ts`). Cover happy path + at least one error path. Required for new service/provider functions.
 
 ## Critical Rules
