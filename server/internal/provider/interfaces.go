@@ -9,14 +9,24 @@ type AgoraTokenProvider interface {
 	GenerateRTCToken(channelName string, uid uint32, ttlSeconds uint32) (string, error)
 }
 
+// ConverterInfo holds the identity of an Agora Media Push converter.
+type ConverterInfo struct {
+	ID   string
+	Name string
+}
+
 // AgoraMediaPushProvider manages Agora Media Push (RTMP converter) operations.
 type AgoraMediaPushProvider interface {
-	// StartMediaPush starts pushing the specified user's stream to the given RTMP URL.
+	// StartMediaPush creates a converter that pushes the specified user's stream to the
+	// given RTMP URL. name must be unique within the project (max 64 chars).
 	// uid is the Agora RTC UID whose stream should be forwarded (required for non-transcoded mode).
 	// Returns the converter ID for stopping later.
-	StartMediaPush(ctx context.Context, channelName string, uid uint32, rtmpURL string) (string, error)
-	// StopMediaPush destroys a converter by its ID.
+	StartMediaPush(ctx context.Context, name string, channelName string, uid uint32, rtmpURL string) (string, error)
+	// StopMediaPush destroys a converter by its ID. Returns nil if the converter no
+	// longer exists (idempotent).
 	StopMediaPush(ctx context.Context, converterID string) error
+	// ListConvertersByChannel returns all active converters for the given channel.
+	ListConvertersByChannel(ctx context.Context, channelName string) ([]ConverterInfo, error)
 }
 
 // AgoraChannelNCSProvider verifies webhook signatures for RTC Channel Event Callbacks.

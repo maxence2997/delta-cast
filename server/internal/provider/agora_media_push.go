@@ -16,6 +16,10 @@ import (
 // Format: https://api.agora.io/{region}/v1/projects/{appId}/rtmp-converters
 const agoraMediaPushBaseURL = "https://api.agora.io/%s/v1/projects/%s/rtmp-converters"
 
+// agoraProjectBaseURL is the regionless project base used by the List Converters by Channel API.
+// Format: https://api.agora.io/v1/projects/{appId}/channels/{cname}/rtmp-converters
+const agoraProjectChannelConvertersURL = "https://api.agora.io/v1/projects/%s/channels/%s/rtmp-converters"
+
 // defaultIdleTimeOut is the max idle seconds before Agora auto-destroys the Converter.
 // Idle means all users have left the channel.
 const defaultIdleTimeOut = 300
@@ -108,10 +112,11 @@ type createConverterResponse struct {
 }
 
 // StartMediaPush creates a Converter that pushes the specified user's stream to the RTMP URL.
+// name must be unique within the project and is used to identify this converter.
 // uid is the Agora RTC UID whose stream should be forwarded.
-func (p *agoraMediaPushProvider) StartMediaPush(ctx context.Context, channelName string, uid uint32, rtmpURL string) (string, error) {
+func (p *agoraMediaPushProvider) StartMediaPush(ctx context.Context, name string, channelName string, uid uint32, rtmpURL string) (string, error) {
 	converter := converterConfig{
-		Name:        fmt.Sprintf("%s_converter", channelName),
+		Name:        name,
 		RtmpURL:     rtmpURL,
 		IdleTimeOut: defaultIdleTimeOut,
 	}
@@ -177,6 +182,7 @@ func (p *agoraMediaPushProvider) StartMediaPush(ctx context.Context, channelName
 }
 
 // StopMediaPush destroys a Converter by its ID.
+// Returns nil if the converter no longer exists (404), making the call idempotent.
 func (p *agoraMediaPushProvider) StopMediaPush(ctx context.Context, converterID string) error {
 	url := fmt.Sprintf(agoraMediaPushBaseURL+"/%s", p.region, p.appID, converterID)
 	req, err := http.NewRequestWithContext(ctx, "DELETE", url, nil)
@@ -192,12 +198,63 @@ func (p *agoraMediaPushProvider) StopMediaPush(ctx context.Context, converterID 
 	}
 	defer resp.Body.Close()
 
+	// Treat 404 as success — the converter no longer exists, which is the desired state.
+	if resp.StatusCode == http.StatusNotFound {
+		return nil
+	}
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
 		body, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("agora media push stop failed: status=%d body=%s", resp.StatusCode, string(body))
 	}
 
 	return nil
+}
+
+// listConvertersByChannelResponse is the response body from the List Converters by Channel API.
+type listConvertersByChannelResponse struct {
+	Success bool `json:"success"`
+	Data    struct {
+		Members []struct {
+			ConverterID   string `json:"converterId"`
+			ConverterName string `json:"converterName"`
+		} `json:"members"`
+	} `json:"data"`
+}
+
+// ListConvertersByChannel returns all active converters for the given Agora channel.
+// Uses the regionless project-channel endpoint:
+//
+//	https://api.agora.io/v1/projects/{appId}/channels/{cname}/rtmp-converters
+func (p *agoraMediaPushProvider) ListConvertersByChannel(ctx context.Context, channelName string) ([]ConverterInfo, error) {
+	url := fmt.Sprintf(agoraProjectChannelConvertersURL, p.appID, channelName)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+
+	p.setHeaders(req)
+
+	resp, err := p.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("agora list converters failed: status=%d body=%s", resp.StatusCode, string(body))
+	}
+
+	var result listConvertersByChannelResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+
+	converters := make([]ConverterInfo, 0, len(result.Data.Members))
+	for _, m := range result.Data.Members {
+		converters = append(converters, ConverterInfo{ID: m.ConverterID, Name: m.ConverterName})
+	}
+	return converters, nil
 }
 
 func (p *agoraMediaPushProvider) setHeaders(req *http.Request) {

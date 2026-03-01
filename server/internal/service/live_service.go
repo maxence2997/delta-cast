@@ -341,17 +341,19 @@ func (s *LiveService) HandleMediaPushWebhook(_ context.Context, noticeID string,
 // channelName is the Agora channel from the NCS payload;
 // clientSeq is the sequence number used for broadcaster-join deduplication (0 if unavailable).
 func (s *LiveService) HandleChannelWebhook(ctx context.Context, noticeID string, eventType int, uid uint32, channelName string, clientSeq int64) error {
-	// Deduplicate by noticeId: Agora may deliver the same notification more than
-	// once. Guard before any state changes or logging to keep the log clean.
+	// Read-only dedup fast-path: bail out immediately if we have already processed
+	// this noticeId. Intentionally does NOT write to SeenNoticeIDs here—the
+	// canonical write happens inside the StateReady guard below so that a noticeId
+	// received while the session is still "preparing" is not tombstoned; Agora's
+	// subsequent retries can then be processed once the session becomes ready.
 	if noticeID != "" {
 		s.mu.Lock()
-		if _, seen := s.session.SeenNoticeIDs[noticeID]; seen {
-			s.mu.Unlock()
+		_, seen := s.session.SeenNoticeIDs[noticeID]
+		s.mu.Unlock()
+		if seen {
 			logger.Infof("ignoring duplicate channel webhook (noticeId=%s)", noticeID)
 			return nil
 		}
-		s.session.SeenNoticeIDs[noticeID] = struct{}{}
-		s.mu.Unlock()
 	}
 	// Event 102 (channel destroyed) or 104 (user left with clientSeq > 0 = real broadcaster,
 	// not a Media Push bot) while live → auto-stop all resources.
@@ -407,6 +409,18 @@ func (s *LiveService) HandleChannelWebhook(ctx context.Context, noticeID string,
 		return nil
 	}
 
+	// Canonical noticeId deduplication: now that we have confirmed StateReady, atomically
+	// check and record the noticeId under the held lock. Multiple goroutines that passed
+	// the read-only fast-path above will all queue here; only the first one proceeds.
+	if noticeID != "" {
+		if _, seen := s.session.SeenNoticeIDs[noticeID]; seen {
+			s.mu.Unlock()
+			logger.Infof("ignoring duplicate channel webhook (noticeId=%s)", noticeID)
+			return nil
+		}
+		s.session.SeenNoticeIDs[noticeID] = struct{}{}
+	}
+
 	// clientSeq deduplication: ignore replays with the same or older sequence number.
 	if clientSeq > 0 && clientSeq <= s.session.LastBroadcasterClientSeq {
 		s.mu.Unlock()
@@ -431,10 +445,11 @@ func (s *LiveService) HandleChannelWebhook(ctx context.Context, noticeID string,
 		ytFailed  bool
 	)
 
-	// Start Media Push to GCP
+	// Start Media Push to GCP. The converter name uses a "_gcp" suffix so that the
+	// GCP and YouTube converters for the same channel have unique names.
 	if s.relay.GCPRelayEnabled {
 		var err error
-		gcpSID, err = s.agoraMediaPush.StartMediaPush(ctx, channelName, uid, gcpRTMPURL)
+		gcpSID, err = s.agoraMediaPush.StartMediaPush(ctx, channelName+"_gcp", channelName, uid, gcpRTMPURL)
 		if err != nil {
 			logger.Errorf("media push to GCP failed: %v", err)
 			gcpFailed = true
@@ -446,7 +461,7 @@ func (s *LiveService) HandleChannelWebhook(ctx context.Context, noticeID string,
 	// the push must be running before YouTube will accept the "live" transition.
 	if s.relay.YouTubeRelayEnabled {
 		var err error
-		ytSID, err = s.agoraMediaPush.StartMediaPush(ctx, channelName, uid, ytRTMPURL)
+		ytSID, err = s.agoraMediaPush.StartMediaPush(ctx, channelName+"_yt", channelName, uid, ytRTMPURL)
 		if err != nil {
 			logger.Errorf("media push to YouTube failed: %v", err)
 			ytFailed = true
@@ -466,6 +481,36 @@ func (s *LiveService) HandleChannelWebhook(ctx context.Context, noticeID string,
 		s.session.LastBroadcasterClientSeq = prevClientSeq
 		s.mu.Unlock()
 		logger.Errorf("rolling back session to ready: media push failed (gcp_failed=%v, yt_failed=%v)", gcpFailed, ytFailed)
+
+		// Clean up any Agora converters associated with this attempt.
+		// Converters with a SID were just created by this call — stop them directly.
+		// Converters with no SID (StartMediaPush returned 409) may be orphans from a
+		// previous failed attempt — list and stop all converters for this channel.
+		// Both cases use a fresh background context so cleanup is not tied to the
+		// webhook request lifecycle.
+		if s.relay.GCPRelayEnabled && gcpSID != "" {
+			go func(sid string) {
+				if err := s.agoraMediaPush.StopMediaPush(context.Background(), sid); err != nil {
+					logger.Errorf("rollback: stop GCP media push converter (sid=%s) failed: %v", sid, err)
+				} else {
+					logger.Infof("rollback: stopped GCP media push converter (sid=%s)", sid)
+				}
+			}(gcpSID)
+		}
+		if s.relay.YouTubeRelayEnabled && ytSID != "" {
+			go func(sid string) {
+				if err := s.agoraMediaPush.StopMediaPush(context.Background(), sid); err != nil {
+					logger.Errorf("rollback: stop YouTube media push converter (sid=%s) failed: %v", sid, err)
+				} else {
+					logger.Infof("rollback: stopped YouTube media push converter (sid=%s)", sid)
+				}
+			}(ytSID)
+		}
+		// If any enabled target had no SID (409 or other failure), orphaned converters
+		// may exist on the Agora side. List and clean up all converters for the channel.
+		if (s.relay.GCPRelayEnabled && gcpSID == "") || (s.relay.YouTubeRelayEnabled && ytSID == "") {
+			go s.stopOrphanedConverters(channelName)
+		}
 		return nil
 	}
 	s.session.State = model.StateLive
@@ -475,6 +520,27 @@ func (s *LiveService) HandleChannelWebhook(ctx context.Context, noticeID string,
 
 	logger.Infof("media push started: gcp_sid=%s, yt_sid=%s", gcpSID, ytSID)
 	return nil
+}
+
+// stopOrphanedConverters lists all Agora Media Push converters for channelName and
+// stops each one. Called during rollback when StartMediaPush returned an error with
+// no SID (e.g. 409 Conflict due to a stale converter from a previous failed attempt).
+func (s *LiveService) stopOrphanedConverters(channelName string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	converters, err := s.agoraMediaPush.ListConvertersByChannel(ctx, channelName)
+	if err != nil {
+		logger.Errorf("rollback: list converters for channel %q failed: %v", channelName, err)
+		return
+	}
+	for _, c := range converters {
+		if err := s.agoraMediaPush.StopMediaPush(ctx, c.ID); err != nil {
+			logger.Errorf("rollback: stop orphaned converter (id=%s name=%q) failed: %v", c.ID, c.Name, err)
+		} else {
+			logger.Infof("rollback: stopped orphaned converter (id=%s name=%q)", c.ID, c.Name)
+		}
+	}
 }
 
 // Stop tears down all resources. Each step logs errors but continues to the next

@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/maxence2997/delta-cast/server/internal/model"
+	"github.com/maxence2997/delta-cast/server/internal/provider"
 )
 
 // --- Mock Providers ---
@@ -19,20 +21,28 @@ func (m *mockAgoraToken) GenerateRTCToken(channelName string, uid uint32, ttl ui
 type mockAgoraMediaPush struct {
 	startCount int
 	stopCount  int
+	listCount  int
 	startErr   error
+	listResult []provider.ConverterInfo
+	listErr    error
 }
 
-func (m *mockAgoraMediaPush) StartMediaPush(ctx context.Context, channelName string, uid uint32, rtmpURL string) (string, error) {
+func (m *mockAgoraMediaPush) StartMediaPush(ctx context.Context, name string, channelName string, uid uint32, rtmpURL string) (string, error) {
 	m.startCount++
 	if m.startErr != nil {
 		return "", m.startErr
 	}
-	return "mock-sid", nil
+	return "mock-sid-" + name, nil
 }
 
 func (m *mockAgoraMediaPush) StopMediaPush(ctx context.Context, converterID string) error {
 	m.stopCount++
 	return nil
+}
+
+func (m *mockAgoraMediaPush) ListConvertersByChannel(ctx context.Context, channelName string) ([]provider.ConverterInfo, error) {
+	m.listCount++
+	return m.listResult, m.listErr
 }
 
 type mockGCP struct {
@@ -417,5 +427,145 @@ func TestHandleMediaPushWebhook_DuplicateNoticeID(t *testing.T) {
 
 	if _, seen := svc.session.SeenNoticeIDs["notice-xyz"]; !seen {
 		t.Error("expected noticeId to remain in SeenNoticeIDs after dedup")
+	}
+}
+
+// TestHandleChannelWebhook_Event103DuringPreparing_ProcessedAfterReady verifies Bug 1 fix:
+// a noticeId received while the session is "preparing" must NOT be tombstoned.
+// Agora's subsequent retry, arriving after the session becomes "ready", must be processed.
+func TestHandleChannelWebhook_Event103DuringPreparing_ProcessedAfterReady(t *testing.T) {
+	svc, pushProv, _, _ := newTestService()
+
+	svc.session.ID = "test-session"
+	svc.session.AgoraChannel = "ch"
+	svc.session.GCPInputURI = "rtmp://gcp"
+	svc.session.YouTubeRTMPURL = "rtmp://yt"
+	svc.session.YouTubeBroadcastID = "bc-123"
+
+	// Event 103 arrives while session is still "preparing" — must be dropped but
+	// the noticeId must NOT be recorded in SeenNoticeIDs.
+	svc.session.State = model.StatePreparing
+	if err := svc.HandleChannelWebhook(context.Background(), "notice-early-103", 103, 999, "ch", 1000); err != nil {
+		t.Fatalf("preparing delivery: unexpected error: %v", err)
+	}
+	if pushProv.startCount != 0 {
+		t.Fatalf("expected 0 push starts during preparing, got %d", pushProv.startCount)
+	}
+	svc.mu.Lock()
+	_, tombstoned := svc.session.SeenNoticeIDs["notice-early-103"]
+	svc.mu.Unlock()
+	if tombstoned {
+		t.Fatal("noticeId must NOT be tombstoned when event is dropped due to preparing state")
+	}
+
+	// Session transitions to ready; Agora retries the same noticeId — must succeed.
+	svc.session.State = model.StateReady
+	if err := svc.HandleChannelWebhook(context.Background(), "notice-early-103", 103, 999, "ch", 1000); err != nil {
+		t.Fatalf("ready delivery: unexpected error: %v", err)
+	}
+	if svc.session.State != model.StateLive {
+		t.Errorf("expected state live after retry, got %s", svc.session.State)
+	}
+	if pushProv.startCount != 2 {
+		t.Errorf("expected 2 push starts after retry, got %d", pushProv.startCount)
+	}
+}
+
+// TestHandleChannelWebhook_Rollback_StopsSuccessfulConverter verifies Bug 2 fix:
+// when GCP push succeeds but YouTube push fails, the rollback must stop the GCP converter.
+func TestHandleChannelWebhook_Rollback_StopsSuccessfulConverter(t *testing.T) {
+	svc, _, _, _ := newTestService()
+
+	stopCount := 0
+	failSecond := &mockAgoraMediaPushFailSecond{stopCount: &stopCount}
+	svc.agoraMediaPush = failSecond
+
+	svc.session.ID = "test-session"
+	svc.session.State = model.StateReady
+	svc.session.AgoraChannel = "ch"
+	svc.session.GCPInputURI = "rtmp://gcp"
+	svc.session.YouTubeRTMPURL = "rtmp://yt"
+	svc.session.YouTubeBroadcastID = "bc-123"
+
+	if err := svc.HandleChannelWebhook(context.Background(), "", 103, 12345, "ch", 2000); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if svc.session.State != model.StateReady {
+		t.Errorf("expected rollback to ready, got %s", svc.session.State)
+	}
+
+	// Wait briefly for the rollback goroutine to run.
+	time.Sleep(50 * time.Millisecond)
+
+	if stopCount == 0 {
+		t.Error("expected StopMediaPush to be called for the successfully created GCP converter")
+	}
+}
+
+// mockAgoraMediaPushFailSecond succeeds on the first StartMediaPush call and fails on the second.
+type mockAgoraMediaPushFailSecond struct {
+	callCount int
+	stopCount *int
+	listCount int
+}
+
+func (m *mockAgoraMediaPushFailSecond) StartMediaPush(_ context.Context, name, _ string, _ uint32, _ string) (string, error) {
+	m.callCount++
+	if m.callCount == 1 {
+		return "gcp-converter-sid", nil
+	}
+	return "", errors.New("push failed")
+}
+
+func (m *mockAgoraMediaPushFailSecond) StopMediaPush(_ context.Context, _ string) error {
+	*m.stopCount++
+	return nil
+}
+
+func (m *mockAgoraMediaPushFailSecond) ListConvertersByChannel(_ context.Context, _ string) ([]provider.ConverterInfo, error) {
+	m.listCount++
+	return nil, nil
+}
+
+// TestHandleChannelWebhook_Rollback_ListsOrphanedConverters verifies Bug 3 fix:
+// when both pushes fail with no SID (e.g. 409), rollback must call ListConvertersByChannel
+// and stop all returned converters.
+func TestHandleChannelWebhook_Rollback_ListsOrphanedConverters(t *testing.T) {
+	svc, _, _, _ := newTestService()
+
+	orphanPush := &mockAgoraMediaPush{
+		startErr: errors.New("409 conflict"),
+		listResult: []provider.ConverterInfo{
+			{ID: "orphan-id-1", Name: "ch_gcp"},
+			{ID: "orphan-id-2", Name: "ch_yt"},
+		},
+	}
+	svc.agoraMediaPush = orphanPush
+
+	svc.session.ID = "test-session"
+	svc.session.State = model.StateReady
+	svc.session.AgoraChannel = "ch"
+	svc.session.GCPInputURI = "rtmp://gcp"
+	svc.session.YouTubeRTMPURL = "rtmp://yt"
+	svc.session.YouTubeBroadcastID = "bc-123"
+
+	if err := svc.HandleChannelWebhook(context.Background(), "", 103, 12345, "ch", 3000); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if svc.session.State != model.StateReady {
+		t.Errorf("expected rollback to ready, got %s", svc.session.State)
+	}
+
+	// Wait briefly for the rollback goroutine to run.
+	time.Sleep(50 * time.Millisecond)
+
+	if orphanPush.listCount == 0 {
+		t.Error("expected ListConvertersByChannel to be called for orphan cleanup")
+	}
+	// Both orphaned converters should have been stopped.
+	if orphanPush.stopCount != 2 {
+		t.Errorf("expected 2 StopMediaPush calls for orphaned converters, got %d", orphanPush.stopCount)
 	}
 }
