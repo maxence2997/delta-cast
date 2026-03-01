@@ -116,7 +116,7 @@ make web-dev    # 僅啟動前端 (port 3000)
 
 ## 環境變數說明
 
-所有環境變數定義於 [`server/.env.example`](server/.env.example)，分為四類：
+後端環境變數定義於 [`server/.env.example`](server/.env.example)，分為四類：
 
 | 類別         | 變數前綴                      |
 | ------------ | ----------------------------- |
@@ -124,6 +124,11 @@ make web-dev    # 僅啟動前端 (port 3000)
 | Agora        | `AGORA_*`                     |
 | GCP          | `GCP_*`                       |
 | YouTube      | `YOUTUBE_*`                   |
+
+Web 前端環境變數定義於 [`web/.env.example`](web/.env.example)，目前僅包含：
+| 變數 | 說明 |
+| -------------- | -------------------- |
+| `NEXT_PUBLIC_API_URL` | 後端 API 基底 URL（例如 `https://localhost:8080`） |
 
 ---
 
