@@ -58,21 +58,22 @@
 stateDiagram-v2
     [*] --> idle
     idle --> preparing : POST /v1/live/prepare
-    preparing --> ready : GCP + YouTube 資源就緒（非同步，約 30-60s）
-    preparing --> idle : 資源分配失敗
-    preparing --> stopping : POST /v1/live/stop（中途取消）
-    ready --> live : Agora NCS Webhook (eventType=103)
-    live --> stopping : POST /v1/live/stop
-    stopping --> idle : 清理完成
+    preparing --> ready : allocateResources 完成（雙重確認通過）
+    preparing --> idle : allocateResources 失敗（GCP 或 YT 錯誤）
+    preparing --> stopping : Stop() 呼叫（allocCancel 取消 ctx）
+    ready --> live : Agora NCS event 103
+    live --> stopping : POST /v1/live/stop（手動）
+    live --> stopping : Agora NCS event 102 / 104（自動）
+    stopping --> idle : 完整 teardown 完成
 ```
 
-| 狀態        | 說明                                    |
-| ----------- | --------------------------------------- |
-| `idle`      | 無活躍 Session                          |
-| `preparing` | GCP 與 YouTube 資源建立中（背景非同步） |
-| `ready`     | 資源就緒，播放 URL 已填入，等待推流     |
-| `live`      | 串流進行中，有實際內容                  |
-| `stopping`  | 資源清理中                              |
+| 狀態        | 說明                                                          |
+| ----------- | ------------------------------------------------------------- |
+| `idle`      | 無活躍 Session                                                |
+| `preparing` | GCP 與 YouTube 資源建立中（背景非同步，約 30-60s）            |
+| `ready`     | 資源就緒，播放 URL 已填入，等待推流                           |
+| `live`      | 串流進行中，有實際內容                                        |
+| `stopping`  | 資源清理中；手動觸發或收到 Agora NCS event 102 / 104 自動觸發 |
 
 ### 3.3 GCP 資源生命週期
 

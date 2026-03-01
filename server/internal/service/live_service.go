@@ -167,15 +167,11 @@ func (s *LiveService) allocateResources(sessionID string) {
 	wg.Wait()
 	logger.Infof("[prepare] resource allocation finished for session %s", sessionID)
 
-	s.mu.Lock()
-	sessionChanged := s.session.ID != sessionID
-	stateStopping := s.session.State == model.StateStopping
-	s.mu.Unlock()
-
-	// If Stop was called while we were allocating, clean up any partial resources
-	// using a fresh context (the original ctx may already be cancelled).
-	if sessionChanged || stateStopping {
-		logger.Infof("[prepare] session %s was interrupted mid-allocation, cleaning up partial resources", sessionID)
+	// cleanupPartialResources tears down any resources already created during this
+	// allocation attempt. It uses local variables (inputID, channelID, broadcastID)
+	// so it is safe to call even after the session has been reset by Stop().
+	cleanupPartialResources := func() {
+		logger.Infof("[prepare] cleaning up partial resources for session %s", sessionID)
 		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cleanupCancel()
 		if s.relay.GCPRelayEnabled {
@@ -200,11 +196,34 @@ func (s *LiveService) allocateResources(sessionID string) {
 			s.session = newIdleSession()
 		}
 		s.mu.Unlock()
-		logger.Infof("[prepare] cleanup complete for interrupted session %s", sessionID)
-		return
+		logger.Infof("[prepare] cleanup complete for session %s", sessionID)
 	}
 
 	s.mu.Lock()
+	sessionChanged := s.session.ID != sessionID
+	stateStopping := s.session.State == model.StateStopping
+	s.mu.Unlock()
+
+	// If Stop was called while we were allocating, clean up any partial resources
+	// using a fresh context (the original ctx may already be cancelled).
+	if sessionChanged || stateStopping {
+		logger.Infof("[prepare] session %s interrupted mid-allocation (stop or session change)", sessionID)
+		cleanupPartialResources()
+		return
+	}
+
+	// Re-acquire lock to write the final session state.
+	// We must re-check the stopping condition here because Stop() may have completed
+	// between the snapshot above and this lock acquisition: it would have reset the
+	// session to idle while missing resource cleanup (session fields were not yet
+	// written, so Stop() saw empty channelID/gcpSID and skipped them).
+	s.mu.Lock()
+	if s.session.ID != sessionID || s.session.State == model.StateStopping {
+		s.mu.Unlock()
+		logger.Warnf("[prepare] Stop() raced with successful allocation for session %s — running cleanup", sessionID)
+		cleanupPartialResources()
+		return
+	}
 	defer s.mu.Unlock()
 
 	if gcpErr != nil {
