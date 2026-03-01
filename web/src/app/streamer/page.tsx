@@ -7,6 +7,7 @@ import type {
   IMicrophoneAudioTrack,
 } from "agora-rtc-sdk-ng";
 import { useSession } from "@/lib/use-session";
+import * as api from "@/lib/api";
 import StatusBadge from "@/components/status-badge";
 
 /** Lazily import Agora SDK to avoid `window is not defined` during SSR. */
@@ -94,7 +95,7 @@ export default function StreamerPage() {
       const AgoraRTC = await getAgoraRTC();
       const hostClient = AgoraRTC.createClient({
         mode: "live",
-        codec: "h264",
+        codec: "vp8",
         role: "host",
       });
       hostClientRef.current = hostClient;
@@ -123,6 +124,8 @@ export default function StreamerPage() {
       videoTrackRef.current?.close();
       audioTrackRef.current?.close();
       hostClientRef.current?.leave();
+      // Fire-and-forget: ensure backend session is cleaned up if user navigates away
+      api.stop().catch(() => {});
     };
   }, []);
 
