@@ -1,6 +1,9 @@
-# Agora Notifications — Receive Channel Event Notifications
+# Agora NCS — RTC Channel Event Notifications
 
-Source: https://docs.agora.io/en/interactive-live-streaming/advanced-features/receive-notifications
+Sources:
+
+- https://docs.agora.io/en/interactive-live-streaming/advanced-features/receive-notifications
+- https://docs.agora.io/en/interactive-live-streaming/channel-management-api/webhook/channel-event-type
 
 ---
 
@@ -9,6 +12,9 @@ Source: https://docs.agora.io/en/interactive-live-streaming/advanced-features/re
 Agora Notification Center Service (NCS) sends HTTPS POST callbacks to your webhook when subscribed RTC channel events occur. Your server must authenticate the notification and return `200 OK` within **10 seconds**. The response body must be in **JSON format**.
 
 Retry policy: If `200 OK` is not received within 10 s, Agora immediately resends. The interval between retries increases gradually. Notifications stops after **3 retries**.
+
+This webhook is configured under **Agora Console → Notifications → RTC Channel Event Callbacks**.
+The secret shown there corresponds to `AGORA_CHANNEL_NCS_SECRET` in DeltaCast.
 
 ---
 
@@ -20,21 +26,22 @@ Retry policy: If `200 OK` is not received within 10 s, Agora immediately resends
 
 ### Headers
 
-| Header | Description |
-|--------|-------------|
-| `Content-Type` | `application/json` |
-| `Agora-Signature` | HMAC/SHA1 signature computed from the NCS secret + raw request body. |
+| Header               | Description                                                            |
+| -------------------- | ---------------------------------------------------------------------- |
+| `Content-Type`       | `application/json`                                                     |
+| `Agora-Signature`    | HMAC/SHA1 signature computed from the NCS secret + raw request body.   |
 | `Agora-Signature-V2` | HMAC/SHA256 signature computed from the NCS secret + raw request body. |
 
 ### Body Fields
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `noticeId` | String | Unique ID for this notification callback. |
-| `productId` | Number | Product ID: `1`=RTC, `3`=Cloud Recording, `4`=Media Pull, `5`=Media Push |
-| `eventType` | Number | Type of event (see Event Types below). |
-| `notifyMs` | Number | Unix timestamp (ms) when NCS sends the callback. Updated on resend. |
-| `payload` | JSON Object | Event-specific payload (varies per event type). |
+| Field       | Type        | Description                                                                   |
+| ----------- | ----------- | ----------------------------------------------------------------------------- |
+| `noticeId`  | String      | Unique ID for this notification callback. Use with `notifyMs` to deduplicate. |
+| `productId` | Number      | Always `1` for RTC Channel events.                                            |
+| `eventType` | Number      | Type of event (see Event Types below).                                        |
+| `notifyMs`  | Number      | Unix timestamp (ms) when NCS sends the callback. Updated on resend.           |
+| `sid`       | String      | Session ID.                                                                   |
+| `payload`   | JSON Object | Event-specific payload (varies per event type).                               |
 
 #### Example
 
@@ -44,7 +51,7 @@ Retry policy: If `200 OK` is not received within 10 s, Agora immediately resends
   "productId": 1,
   "eventType": 101,
   "notifyMs": 1611566412672,
-  "payload": { "..." : "..." }
+  "payload": { "...": "..." }
 }
 ```
 
@@ -61,17 +68,11 @@ Retry policy: If `200 OK` is not received within 10 s, Agora immediately resends
 ### Go example (SHA1)
 
 ```go
-func calcSignature(secret, payload string) string {
-    mac := hmac.New(sha1.New, []byte(secret))
-    mac.Write([]byte(payload))
-    return hex.EncodeToString(mac.Sum(nil))
-}
-
+mac := hmac.New(sha1.New, []byte(secret))
+mac.Write(body)
+expected := hex.EncodeToString(mac.Sum(nil))
 // Use hmac.Equal for constant-time comparison (timing-attack safe).
-func verifySignature(requestBody, signature string) bool {
-    expected := calcSignature(secret, requestBody)
-    return hmac.Equal([]byte(expected), []byte(signature))
-}
+return hmac.Equal([]byte(expected), []byte(receivedSignature))
 ```
 
 ---
@@ -85,57 +86,197 @@ func verifySignature(requestBody, signature string) bool {
 
 ---
 
-## Event Types (RTC Channel Events)
+## Event Types
 
-| Code | Name | Description |
-|------|------|-------------|
-| `101` | channel create | First user joins; channel initialized. |
-| `102` | channel destroy | Last user leaves; channel destroyed. |
-| `103` | broadcaster join channel | Host joins in streaming (LIVE_BROADCASTING) profile. |
-| `104` | broadcaster leave channel | Host leaves in streaming profile. |
-| `105` | audience join channel | Audience member joins in streaming profile. |
-| `106` | audience leave channel | Audience member leaves in streaming profile. |
-| `107` | user join (communication) | User joins in communication profile. |
-| `108` | user leave (communication) | User leaves in communication profile. |
-| `111` | role → broadcaster | Audience switches to host role. |
-| `112` | role → audience | Host switches to audience role. |
+| Code  | Name                       | Description                                          |
+| ----- | -------------------------- | ---------------------------------------------------- |
+| `101` | channel create             | First user joins; channel initialized.               |
+| `102` | channel destroy            | Last user leaves; channel destroyed.                 |
+| `103` | broadcaster join channel   | Host joins in streaming (LIVE_BROADCASTING) profile. |
+| `104` | broadcaster leave channel  | Host leaves in streaming profile.                    |
+| `105` | audience join channel      | Audience member joins in streaming profile.          |
+| `106` | audience leave channel     | Audience member leaves in streaming profile.         |
+| `107` | user join (communication)  | User joins in communication profile.                 |
+| `108` | user leave (communication) | User leaves in communication profile.                |
+| `111` | role → broadcaster         | Audience switches to host role.                      |
+| `112` | role → audience            | Host switches to audience role.                      |
 
 ### Recommended subscriptions
 
 - **LIVE_BROADCASTING profile**: `103`, `104`, `105`, `106`, `111`, `112`
 - **COMMUNICATION profile**: `103`, `104`, `111`, `112`
 
-### Common Payload Fields (events 103–112)
+---
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `channelName` | String | Channel name. |
-| `uid` | Number | User ID. |
-| `platform` | Number | `1`=Android, `2`=iOS, `5`=Windows, `6`=Linux, `7`=Web, `8`=macOS, `0`=Other |
-| `clientType` | Number | Linux only (`platform=6`): `3`=On-premise Recording, `10`=Cloud Recording |
-| `clientSeq` | Number (UInt64) | Sequence number; monotonically increasing per user. Use to order/deduplicate events. |
-| `ts` | Number | Unix timestamp (s) when the event occurred on the RTC server. |
-| `reason` | Number | (Leave events only) Why the user left — see Reason Codes below. |
-| `duration` | Number | (Leave events only) Time (s) the user spent in the channel. |
+## Event Payloads
 
-### Events 101 / 102 Payload
+### 101 — channel create
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `channelName` | String | Channel name. |
-| `ts` | Number | Unix timestamp (s). |
-| `lastUid` | Number | (102 only) Last user to leave. |
+| Field         | Type   | Description                                               |
+| ------------- | ------ | --------------------------------------------------------- |
+| `channelName` | String | The channel name.                                         |
+| `ts`          | Number | Unix timestamp (s) when the event occurred on the server. |
 
-### Reason Codes (leave events)
+```json
+{ "channelName": "test_webhook", "ts": 1560396834 }
+```
 
-| Code | Meaning |
-|------|---------|
-| `1` | User quit normally. |
-| `2` | Connection timeout (no data for >10 s). |
-| `3` | Permission — kicked via Banning API. |
-| `4` | Agora RTC server internal issue (transient). |
-| `5` | User joined from a new device; old device forced out. |
-| `9` | SDK disconnected due to multiple client IPs. |
+---
+
+### 102 — channel destroy
+
+| Field         | Type   | Description                                                                                 |
+| ------------- | ------ | ------------------------------------------------------------------------------------------- |
+| `channelName` | String | The channel name.                                                                           |
+| `ts`          | Number | Unix timestamp (s) when the event occurred.                                                 |
+| `lastUid`     | Number | UID of the last user to leave. Multiple callbacks may appear if users leave simultaneously. |
+
+```json
+{ "channelName": "test_webhook", "ts": 1560399999, "lastUid": 12121212 }
+```
+
+---
+
+### 103 — broadcaster join channel
+
+| Field         | Type            | Description                                                                            |
+| ------------- | --------------- | -------------------------------------------------------------------------------------- |
+| `channelName` | String          | The channel name.                                                                      |
+| `uid`         | Number          | The host's UID.                                                                        |
+| `platform`    | Number          | `1`=Android, `2`=iOS, `5`=Windows, `6`=Linux, `7`=Web, `8`=macOS, `0`=Other            |
+| `clientType`  | Number          | Linux only (`platform=6`): `3`=On-premise Recording, `8`=Applets, `10`=Cloud Recording |
+| `clientSeq`   | Number (UInt64) | Sequence number; monotonically increasing per user. Use to order/deduplicate events.   |
+| `ts`          | Number          | Unix timestamp (s) when the event occurred on the server.                              |
+| `account`     | String          | The user account / user ID string.                                                     |
+
+```json
+{
+  "channelName": "test_webhook",
+  "uid": 12121212,
+  "platform": 1,
+  "clientSeq": 1625051030746,
+  "ts": 1560396843,
+  "account": "test"
+}
+```
+
+> **DeltaCast usage:** This event triggers Media Push to GCP and YouTube when the streamer joins.
+
+---
+
+### 104 — broadcaster leave channel
+
+| Field         | Type            | Description                                             |
+| ------------- | --------------- | ------------------------------------------------------- |
+| `channelName` | String          | The channel name.                                       |
+| `uid`         | Number          | The host's UID.                                         |
+| `platform`    | Number          | Same codes as event 103.                                |
+| `clientType`  | Number          | Linux only (`platform=6`).                              |
+| `clientSeq`   | Number (UInt64) | Sequence number for ordering events from the same user. |
+| `reason`      | Number          | Leave reason — see Reason Codes below.                  |
+| `ts`          | Number          | Unix timestamp (s) when the event occurred.             |
+| `duration`    | Number          | Time the user spent in the channel (seconds).           |
+| `account`     | String          | The user account / user ID string.                      |
+
+```json
+{
+  "channelName": "test_webhook",
+  "uid": 12121212,
+  "platform": 1,
+  "clientSeq": 1625051030789,
+  "reason": 1,
+  "ts": 1560396943,
+  "duration": 600,
+  "account": "test"
+}
+```
+
+---
+
+### 105 — audience join channel
+
+Same fields as [103 — broadcaster join channel](#103--broadcaster-join-channel), with `uid` being the audience member's UID.
+
+```json
+{
+  "channelName": "test_webhook",
+  "uid": 12121212,
+  "platform": 1,
+  "clientSeq": 1625051035346,
+  "ts": 1560396843,
+  "account": "test"
+}
+```
+
+---
+
+### 106 — audience leave channel
+
+Same fields as [104 — broadcaster leave channel](#104--broadcaster-leave-channel), with `uid` being the audience member's UID.
+
+```json
+{
+  "channelName": "test_webhook",
+  "uid": 12121212,
+  "platform": 1,
+  "clientSeq": 1625051035390,
+  "reason": 1,
+  "ts": 1560396943,
+  "duration": 600,
+  "account": "test"
+}
+```
+
+---
+
+### 111 — client role change to broadcaster
+
+| Field         | Type            | Description                                             |
+| ------------- | --------------- | ------------------------------------------------------- |
+| `channelName` | String          | The channel name.                                       |
+| `uid`         | Number          | The user's UID.                                         |
+| `clientSeq`   | Number (UInt64) | Sequence number for ordering events from the same user. |
+| `ts`          | Number          | Unix timestamp (s) when the event occurred.             |
+| `account`     | String          | The user account / user ID string.                      |
+
+```json
+{
+  "channelName": "test_webhook",
+  "uid": 12121212,
+  "clientSeq": 1625051035469,
+  "ts": 1560396834,
+  "account": "test"
+}
+```
+
+---
+
+### 112 — client role change to audience
+
+Same fields as [111 — client role change to broadcaster](#111--client-role-change-to-broadcaster).
+
+```json
+{
+  "channelName": "test_webhook",
+  "uid": 12121212,
+  "clientSeq": 16250510358369,
+  "ts": 1560496834,
+  "account": "test"
+}
+```
+
+---
+
+## Reason Codes (leave events: 104, 106, 108)
+
+| Code  | Meaning                                                                  |
+| ----- | ------------------------------------------------------------------------ |
+| `1`   | User quit normally.                                                      |
+| `2`   | Connection timeout (no data for >10 s).                                  |
+| `3`   | Permission — kicked via Banning API.                                     |
+| `4`   | Agora RTC server internal issue (transient).                             |
+| `5`   | User joined from a new device; old device forced out.                    |
+| `9`   | SDK disconnected due to multiple client IPs.                             |
 | `999` | **Abnormal** — frequent login/logout. Treat as special case (see below). |
 
 ---
@@ -159,6 +300,7 @@ Use a combination of `noticeId` and `notifyMs` to deduplicate: same `noticeId` w
 ### Abnormal user activity (`reason=999`)
 
 When event `104` arrives with `reason=999`:
+
 1. Do **not** immediately remove the user.
 2. Wait **1 minute**, then call the Banning user privileges API to remove the user from the channel.
 3. If deleted immediately, subsequent out-of-order callbacks may corrupt online-status tracking.
@@ -204,10 +346,11 @@ Response:
 
 ## DeltaCast Integration Notes
 
-- **Endpoint**: `/v1/webhook/agora/channel` (RTC Channel Events), `/v1/webhook/agora/media-push` (Media Push NCS)
-- **Key event**: `103` (broadcaster join) → triggers Media Push relay start.
+- **Endpoints**: `/v1/webhook/agora/channel` (RTC Channel Events), `/v1/webhook/agora/media-push` (Media Push NCS)
+- **Key event**: `103` (broadcaster join) → triggers Media Push relay start to GCP and YouTube.
 - **Key event**: `104` (broadcaster leave) → can be used to trigger relay stop.
 - Signature verified with `AGORA_CHANNEL_NCS_SECRET` (V1 HMAC/SHA1).
 - No JWT auth on webhook endpoints — security is via signature only.
-- State machine in `LiveService` acts as the primary idempotency guard (duplicate `103` events are safe as long as state is already `live`).
-- `clientSeq` is available in the channel event payload and can be used to prevent duplicate `103` triggers if the service ever relaxes state machine strictness.
+- State machine in `LiveService` acts as the primary idempotency guard.
+- `clientSeq` is tracked in `Session.LastBroadcasterClientSeq` to deduplicate event-103 replays.
+- Channel name validation ensures events for `test_webhook` (health check) are safely ignored.
