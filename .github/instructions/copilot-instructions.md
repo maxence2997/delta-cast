@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-DeltaCast is a **one-in, multi-out live streaming relay** system. A streamer pushes via Agora RTC; the Golang backend orchestrates relay to YouTube (RTMP) and Google Live Stream API (HLS via Cloud CDN). The system uses a **two-phase flow**: `prepare` pre-warms GCP/YouTube resources (30-60s), then `start` returns an Agora token for immediate streaming. Agora NCS webhook triggers Media Push upon detecting the stream. Read [doc/spec.md](../doc/spec.md) and [doc/instruction.md](../doc/instruction.md) for the full system design before making changes.
+DeltaCast is a **one-in, multi-out live streaming relay** system. A streamer pushes via Agora RTC; the Golang backend orchestrates relay to YouTube (RTMP) and Google Live Stream API (HLS via Cloud CDN). The system uses a **two-phase flow**: `prepare` pre-warms GCP/YouTube resources (30-60s), then `start` returns an Agora token for immediate streaming. Agora NCS webhook triggers Media Push upon detecting the stream. Read [doc/spec.md](../../doc/spec.md) and [doc/instruction.md](../../doc/instruction.md) for the full system design before making changes.
 
 ## Architecture
 
@@ -44,7 +44,7 @@ docker-compose -f docker-compose.local.yml up
 
 - **Go**: `gofmt`/`goimports`, snake_case filenames (`live_service.go`), GoDoc on public functions, `if err != nil` error handling (no panic), secrets from env vars only.
 - **TypeScript/React**: ESLint + Prettier, kebab-case filenames (`live-player.tsx`), functional components + hooks only.
-- **Git**: Follow the commit message rules defined in [.github/commit-message-instructions.md](commit-message-instructions.md). Headers and body must be in Traditional Chinese. Each commit must represent exactly one logical change.
+- **Git**: Follow the commit message rules defined in [.github/instructions/commit-message-instructions.md](../../.github/instructions/commit-message-instructions.md). Headers and body must be in Traditional Chinese. Each commit must represent exactly one logical change.
 - **Tests**: Co-located with source (`_test.go` / `.test.ts`). Cover happy path + at least one error path. Required for new service/provider functions.
 
 ## Critical Rules
@@ -55,7 +55,7 @@ docker-compose -f docker-compose.local.yml up
 4. **Resource cleanup is critical** — GCP resources are billed per-time. The stop flow must attempt every cleanup step even if earlier steps fail (log error, continue).
 5. **Idempotent webhook handling** — Agora NCS may send duplicate events; guard with session state checks.
 6. **Single active session** — POC supports one session at a time. Duplicate `start` returns existing session, not a new one.
-7. **Task tracking** — when completing items related to [doc/task-tracking.md](../doc/task-tracking.md), update the checkboxes there.
+7. **Task tracking** — when completing items related to [doc/task-tracking.md](../../doc/task-tracking.md), update the checkboxes there.
 8. **Documentation** — update `doc/spec.md`, `doc/instruction.md`, `doc/api/api.md`, `README.md` with any design changes or new implementation details.
 9. **Accuracy** — if you have questions or need clarification, ask in the project chat or create an issue. Do not make assumptions without confirming.
 10. **Language Consistency** — When the user provides prompts or questions in Traditional Chinese, always respond in Traditional Chinese; otherwise, respond in English. This ensures clear communication and maintains consistency throughout the project.
