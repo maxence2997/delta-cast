@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/maxence2997/delta-cast/server/internal/model"
@@ -18,10 +19,14 @@ func (m *mockAgoraToken) GenerateRTCToken(channelName string, uid uint32, ttl ui
 type mockAgoraMediaPush struct {
 	startCount int
 	stopCount  int
+	startErr   error
 }
 
 func (m *mockAgoraMediaPush) StartMediaPush(ctx context.Context, channelName string, uid uint32, rtmpURL string) (string, error) {
 	m.startCount++
+	if m.startErr != nil {
+		return "", m.startErr
+	}
 	return "mock-sid", nil
 }
 
@@ -191,7 +196,7 @@ func TestHandleChannelWebhook_BroadcasterJoin_MovesToLive(t *testing.T) {
 	svc.session.YouTubeRTMPURL = "rtmp://yt"
 	svc.session.YouTubeBroadcastID = "bc-123"
 
-	err := svc.HandleChannelWebhook(context.Background(), 103, 12345, "ch", 1000)
+	err := svc.HandleChannelWebhook(context.Background(), "", 103, 12345, "ch", 1000)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -211,7 +216,7 @@ func TestHandleChannelWebhook_Idempotent(t *testing.T) {
 	svc.session.State = model.StateLive
 	svc.session.AgoraChannel = "ch"
 
-	err := svc.HandleChannelWebhook(context.Background(), 103, 12345, "ch", 1000)
+	err := svc.HandleChannelWebhook(context.Background(), "", 103, 12345, "ch", 1000)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -232,7 +237,7 @@ func TestHandleChannelWebhook_DuplicateClientSeq(t *testing.T) {
 	svc.session.LastBroadcasterClientSeq = 1000
 
 	// Replayed event with same clientSeq — should be ignored even in StateReady.
-	err := svc.HandleChannelWebhook(context.Background(), 103, 12345, "ch", 1000)
+	err := svc.HandleChannelWebhook(context.Background(), "", 103, 12345, "ch", 1000)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -252,7 +257,7 @@ func TestHandleChannelWebhook_WrongChannel(t *testing.T) {
 	svc.session.YouTubeRTMPURL = "rtmp://yt"
 
 	// Event from a different channel — should be silently ignored.
-	err := svc.HandleChannelWebhook(context.Background(), 103, 12345, "other-channel", 2000)
+	err := svc.HandleChannelWebhook(context.Background(), "", 103, 12345, "other-channel", 2000)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -267,7 +272,7 @@ func TestHandleWebhook_IgnoresOtherEvents(t *testing.T) {
 
 	svc.session.State = model.StateReady
 
-	err := svc.HandleChannelWebhook(context.Background(), 102, 0, "", 0)
+	err := svc.HandleChannelWebhook(context.Background(), "", 102, 0, "", 0)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -341,5 +346,76 @@ func TestStatus(t *testing.T) {
 	}
 	if status.GCPPlaybackURL != "https://cdn/hls" {
 		t.Errorf("unexpected GCP URL: %s", status.GCPPlaybackURL)
+	}
+}
+
+func TestHandleChannelWebhook_MediaPushFails_RollsBackToReady(t *testing.T) {
+	svc, pushProv, _, _ := newTestService()
+	pushProv.startErr = errors.New("push failed")
+
+	svc.session.ID = "test-session"
+	svc.session.State = model.StateReady
+	svc.session.AgoraChannel = "ch"
+	svc.session.GCPInputURI = "rtmp://gcp"
+	svc.session.YouTubeRTMPURL = "rtmp://yt"
+	svc.session.YouTubeBroadcastID = "bc-123"
+
+	err := svc.HandleChannelWebhook(context.Background(), "", 103, 12345, "ch", 500)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if svc.session.State != model.StateReady {
+		t.Errorf("expected session to roll back to ready, got %s", svc.session.State)
+	}
+	// clientSeq must be reset so the same event can be retried.
+	if svc.session.LastBroadcasterClientSeq != 0 {
+		t.Errorf("expected LastBroadcasterClientSeq to be reset to 0, got %d", svc.session.LastBroadcasterClientSeq)
+	}
+}
+
+func TestHandleChannelWebhook_DuplicateNoticeID(t *testing.T) {
+	svc, pushProv, _, _ := newTestService()
+
+	svc.session.ID = "test-session"
+	svc.session.State = model.StateReady
+	svc.session.AgoraChannel = "ch"
+	svc.session.GCPInputURI = "rtmp://gcp"
+	svc.session.YouTubeRTMPURL = "rtmp://yt"
+	svc.session.YouTubeBroadcastID = "bc-123"
+
+	// First delivery — should succeed and trigger media push.
+	if err := svc.HandleChannelWebhook(context.Background(), "notice-abc", 103, 12345, "ch", 1000); err != nil {
+		t.Fatalf("first delivery: unexpected error: %v", err)
+	}
+	if pushProv.startCount != 2 {
+		t.Fatalf("expected 2 starts after first delivery, got %d", pushProv.startCount)
+	}
+
+	// Second delivery with same noticeId — must be ignored entirely.
+	if err := svc.HandleChannelWebhook(context.Background(), "notice-abc", 103, 12345, "ch", 1000); err != nil {
+		t.Fatalf("second delivery: unexpected error: %v", err)
+	}
+	if pushProv.startCount != 2 {
+		t.Errorf("expected no additional starts for duplicate noticeId, got %d total", pushProv.startCount)
+	}
+}
+
+func TestHandleMediaPushWebhook_DuplicateNoticeID(t *testing.T) {
+	svc, _, _, _ := newTestService()
+
+	// First delivery — should process normally (log only, no state change).
+	if err := svc.HandleMediaPushWebhook(context.Background(), "notice-xyz", 1, "conv-1", "", ""); err != nil {
+		t.Fatalf("first delivery: unexpected error: %v", err)
+	}
+
+	// Second delivery with the same noticeId must be silently ignored.
+	// We verify this indirectly: no panic, no error, and the noticeId stays recorded.
+	if err := svc.HandleMediaPushWebhook(context.Background(), "notice-xyz", 1, "conv-1", "", ""); err != nil {
+		t.Fatalf("second delivery: unexpected error: %v", err)
+	}
+
+	if _, seen := svc.session.SeenNoticeIDs["notice-xyz"]; !seen {
+		t.Error("expected noticeId to remain in SeenNoticeIDs after dedup")
 	}
 }

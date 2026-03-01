@@ -41,6 +41,14 @@ type LiveService struct {
 	youtube        provider.YouTubeProvider
 }
 
+// newIdleSession returns a fresh idle session with all deduplication structures initialized.
+func newIdleSession() *model.Session {
+	return &model.Session{
+		State:         model.StateIdle,
+		SeenNoticeIDs: make(map[string]struct{}),
+	}
+}
+
 // NewLiveService creates a new LiveService with the provided providers.
 // opts controls which relay targets are active; set a field to false to skip
 // that provider entirely (useful for debugging).
@@ -52,9 +60,7 @@ func NewLiveService(
 	opts RelayOptions,
 ) *LiveService {
 	return &LiveService{
-		session: &model.Session{
-			State: model.StateIdle,
-		},
+		session:        newIdleSession(),
 		relay:          opts,
 		agoraToken:     agoraToken,
 		agoraMediaPush: agoraMediaPush,
@@ -82,10 +88,11 @@ func (s *LiveService) Prepare(ctx context.Context) (*model.PrepareResponse, erro
 	// Create new session
 	sessionID := uuid.New().String()[:8]
 	s.session = &model.Session{
-		ID:           sessionID,
-		State:        model.StatePreparing,
-		CreatedAt:    time.Now(),
-		AgoraChannel: fmt.Sprintf("deltacast-%s", sessionID),
+		ID:            sessionID,
+		State:         model.StatePreparing,
+		CreatedAt:     time.Now(),
+		AgoraChannel:  fmt.Sprintf("deltacast-%s", sessionID),
+		SeenNoticeIDs: make(map[string]struct{}),
 	}
 	s.mu.Unlock()
 
@@ -190,7 +197,7 @@ func (s *LiveService) allocateResources(sessionID string) {
 		}
 		s.mu.Lock()
 		if s.session.ID == sessionID {
-			s.session = &model.Session{State: model.StateIdle}
+			s.session = newIdleSession()
 		}
 		s.mu.Unlock()
 		logger.Infof("[prepare] cleanup complete for interrupted session %s", sessionID)
@@ -271,7 +278,18 @@ func (s *LiveService) Start(ctx context.Context, appID string) (*model.StartResp
 
 // HandleMediaPushWebhook processes Agora Media Push notification events (productId=5).
 // Event types: 1=ConverterCreated, 2=ConverterConfigChanged, 3=ConverterStateChanged, 4=ConverterDestroyed.
-func (s *LiveService) HandleMediaPushWebhook(_ context.Context, eventType int, converterID, converterState, destroyReason string) error {
+// noticeID is used for deduplication: duplicate deliveries of the same notification are silently ignored.
+func (s *LiveService) HandleMediaPushWebhook(_ context.Context, noticeID string, eventType int, converterID, converterState, destroyReason string) error {
+	if noticeID != "" {
+		s.mu.Lock()
+		if _, seen := s.session.SeenNoticeIDs[noticeID]; seen {
+			s.mu.Unlock()
+			logger.Infof("ignoring duplicate media push webhook (noticeId=%s)", noticeID)
+			return nil
+		}
+		s.session.SeenNoticeIDs[noticeID] = struct{}{}
+		s.mu.Unlock()
+	}
 	switch eventType {
 	case 1:
 		logger.Infof("media push converter created: id=%s", converterID)
@@ -300,9 +318,22 @@ func (s *LiveService) HandleMediaPushWebhook(_ context.Context, eventType int, c
 
 // HandleChannelWebhook processes Agora RTC Channel NCS events (productId=1).
 // For event 103 (broadcaster joins channel), it triggers Media Push to both targets.
-// uid is the broadcaster's Agora RTC UID, channelName is the Agora channel from the NCS payload,
-// and clientSeq is the sequence number used for deduplication (0 if unavailable).
-func (s *LiveService) HandleChannelWebhook(ctx context.Context, eventType int, uid uint32, channelName string, clientSeq int64) error {
+// noticeID is used for deduplication; uid is the broadcaster's Agora RTC UID;
+// channelName is the Agora channel from the NCS payload;
+// clientSeq is the sequence number used for broadcaster-join deduplication (0 if unavailable).
+func (s *LiveService) HandleChannelWebhook(ctx context.Context, noticeID string, eventType int, uid uint32, channelName string, clientSeq int64) error {
+	// Deduplicate by noticeId: Agora may deliver the same notification more than
+	// once. Guard before any state changes or logging to keep the log clean.
+	if noticeID != "" {
+		s.mu.Lock()
+		if _, seen := s.session.SeenNoticeIDs[noticeID]; seen {
+			s.mu.Unlock()
+			logger.Infof("ignoring duplicate channel webhook (noticeId=%s)", noticeID)
+			return nil
+		}
+		s.session.SeenNoticeIDs[noticeID] = struct{}{}
+		s.mu.Unlock()
+	}
 	// Only event 103 (broadcaster join) triggers business logic.
 	// All other events are logged for observability and acknowledged with 200 OK.
 	if eventType != 103 {
@@ -344,18 +375,23 @@ func (s *LiveService) HandleChannelWebhook(ctx context.Context, eventType int, u
 		logger.Infof("ignoring duplicate broadcaster-join event (clientSeq %d ≤ last %d)", clientSeq, s.session.LastBroadcasterClientSeq)
 		return nil
 	}
+	prevClientSeq := s.session.LastBroadcasterClientSeq
 	if clientSeq > 0 {
 		s.session.LastBroadcasterClientSeq = clientSeq
 	}
 
-	s.session.State = model.StateLive
 	channelName = s.session.AgoraChannel
 	gcpRTMPURL := s.session.GCPInputURI
 	ytRTMPURL := s.session.YouTubeRTMPURL
 	broadcastID := s.session.YouTubeBroadcastID
 	s.mu.Unlock()
 
-	var gcpSID, ytSID string
+	var (
+		gcpSID    string
+		ytSID     string
+		gcpFailed bool
+		ytFailed  bool
+	)
 
 	// Start Media Push to GCP
 	if s.relay.GCPRelayEnabled {
@@ -363,22 +399,38 @@ func (s *LiveService) HandleChannelWebhook(ctx context.Context, eventType int, u
 		gcpSID, err = s.agoraMediaPush.StartMediaPush(ctx, channelName, uid, gcpRTMPURL)
 		if err != nil {
 			logger.Errorf("media push to GCP failed: %v", err)
+			gcpFailed = true
 		}
 	}
 
-	// Start Media Push to YouTube and transition broadcast to live
+	// Start Media Push to YouTube and transition broadcast to live.
+	// TransitionBroadcast is only attempted when StartMediaPush succeeds, since
+	// the push must be running before YouTube will accept the "live" transition.
 	if s.relay.YouTubeRelayEnabled {
 		var err error
 		ytSID, err = s.agoraMediaPush.StartMediaPush(ctx, channelName, uid, ytRTMPURL)
 		if err != nil {
 			logger.Errorf("media push to YouTube failed: %v", err)
-		}
-		if err := s.youtube.TransitionBroadcast(ctx, broadcastID, "live"); err != nil {
-			logger.Errorf("youtube transition to live failed: %v", err)
+			ytFailed = true
+		} else {
+			if err := s.youtube.TransitionBroadcast(ctx, broadcastID, "live"); err != nil {
+				logger.Errorf("youtube transition to live failed: %v", err)
+			}
 		}
 	}
 
 	s.mu.Lock()
+	// If any enabled relay target failed to start, roll back to ready so the next
+	// broadcaster-join event (or a manual retry) can re-attempt. Resetting
+	// LastBroadcasterClientSeq allows the same clientSeq to be reprocessed.
+	if gcpFailed || ytFailed {
+		s.session.State = model.StateReady
+		s.session.LastBroadcasterClientSeq = prevClientSeq
+		s.mu.Unlock()
+		logger.Errorf("rolling back session to ready: media push failed (gcp_failed=%v, yt_failed=%v)", gcpFailed, ytFailed)
+		return nil
+	}
+	s.session.State = model.StateLive
 	s.session.MediaPushGCPSID = gcpSID
 	s.session.MediaPushYouTubeSID = ytSID
 	s.mu.Unlock()
@@ -491,7 +543,7 @@ func (s *LiveService) Stop(ctx context.Context) (*model.StopResponse, error) {
 
 	// Reset session
 	s.mu.Lock()
-	s.session = &model.Session{State: model.StateIdle}
+	s.session = newIdleSession()
 	s.mu.Unlock()
 
 	logger.Infof("[stop] session %s teardown complete", sessionID)

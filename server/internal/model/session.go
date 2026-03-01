@@ -48,4 +48,7 @@ type Session struct {
 	// NCS deduplication — tracks the clientSeq of the last processed broadcaster-join event
 	// (event 103). A later event with an equal or lower clientSeq is a duplicate and is ignored.
 	LastBroadcasterClientSeq int64 `json:"-"`
+	// SeenNoticeIDs tracks noticeIds already processed in this session to prevent
+	// duplicate NCS callbacks from being acted on more than once.
+	SeenNoticeIDs map[string]struct{} `json:"-"`
 }
