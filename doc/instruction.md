@@ -115,9 +115,17 @@ delta-cast/
 
 ### 環境變數設定
 
+**後端**
+
 1. 複製 `server/.env.example` 到 `server/.env`。
 2. 填入所有必要的 API 金鑰與配置。
-3. **禁止**將 `.env` 加入版本控制（已在 `.gitignore` 中排除）。
+
+**前端**
+
+1. 複製 `web/.env.example` 到 `web/.env.local`。
+2. 填入 `NEXT_PUBLIC_API_URL`（本機開發為 `http://localhost:8080`，生產環境為 Railway 網域）。
+
+> **禁止將 `.env` 加入版本控制**（已在 `.gitignore` 中排除）。
 
 **關鍵選用環境變數：**
 

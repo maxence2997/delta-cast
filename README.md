@@ -78,8 +78,13 @@ flowchart LR
 ### 1. 設定環境變數
 
 ```bash
+# 後端
 cp server/.env.example server/.env
 # 填入 Agora、GCP、YouTube 等金鑰
+
+# 前端
+cp web/.env.example web/.env.local
+# 填入 NEXT_PUBLIC_API_URL
 ```
 
 ### 2. 全端啟動（建議）
@@ -126,6 +131,7 @@ make web-dev    # 僅啟動前端 (port 3000)
 
 | Method | Path                | 驗證       | 說明                              |
 | ------ | ------------------- | ---------- | --------------------------------- |
+| `GET`  | `/health`           | 無         | 健康檢查，回傳 `{"status":"ok"}`  |
 | `POST` | `/v1/live/prepare`  | JWT        | 非同步預熱 GCP + YouTube 資源     |
 | `POST` | `/v1/live/start`    | JWT        | 回傳 Agora Token，開始推流        |
 | `POST` | `/v1/live/stop`     | JWT        | 停止中繼，清理所有資源            |
