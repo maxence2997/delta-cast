@@ -9,10 +9,12 @@ import YouTubePlayer from "@/components/youtube-player";
 export default function AudiencePage() {
   const { session, refreshStatus, startPolling, stopPolling } = useSession();
 
-  // Start polling on mount to pick up any active session
+  // Start polling on mount to pick up any active session.
+  // continueOnIdle=true keeps polling even when state is idle so the audience
+  // page automatically detects when the streamer starts preparing.
   useEffect(() => {
     refreshStatus();
-    startPolling();
+    startPolling(true);
     return () => stopPolling();
   }, [refreshStatus, startPolling, stopPolling]);
 

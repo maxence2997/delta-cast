@@ -38,30 +38,36 @@ export function useSession() {
     [stopPolling],
   );
 
-  const startPolling = useCallback(() => {
-    stopPolling();
-    console.log("[Session] polling started");
-    pollRef.current = setInterval(async () => {
-      try {
-        const status = await api.getStatus();
-        console.log(`[Poll] state=${status.state}`, status);
-        setSession({
-          sessionId: status.sessionId,
-          state: status.state as SessionState,
-          gcpPlaybackUrl: status.gcpPlaybackUrl,
-          youtubeWatchUrl: status.youtubeWatchUrl,
-        });
-        // Stop polling once we reach a stable state
-        if (status.state === "idle") {
-          console.log("[Session] reached idle, stopping poll");
-          stopPolling();
-          setSession(null);
+  const startPolling = useCallback(
+    (continueOnIdle = false) => {
+      stopPolling();
+      console.log("[Session] polling started");
+      pollRef.current = setInterval(async () => {
+        try {
+          const status = await api.getStatus();
+          console.log(`[Poll] state=${status.state}`, status);
+          if (status.state === "idle") {
+            console.log("[Session] reached idle");
+            setSession(null);
+            if (!continueOnIdle) {
+              console.log("[Session] stopping poll (idle)");
+              stopPolling();
+            }
+          } else {
+            setSession({
+              sessionId: status.sessionId,
+              state: status.state as SessionState,
+              gcpPlaybackUrl: status.gcpPlaybackUrl,
+              youtubeWatchUrl: status.youtubeWatchUrl,
+            });
+          }
+        } catch (error) {
+          handlePollingError(error);
         }
-      } catch (error) {
-        handlePollingError(error);
-      }
-    }, 2000);
-  }, [handlePollingError, stopPolling]);
+      }, 2000);
+    },
+    [handlePollingError, stopPolling],
+  );
 
   useEffect(() => {
     return () => stopPolling();
