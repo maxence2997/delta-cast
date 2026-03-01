@@ -334,6 +334,25 @@ func (s *LiveService) HandleChannelWebhook(ctx context.Context, noticeID string,
 		s.session.SeenNoticeIDs[noticeID] = struct{}{}
 		s.mu.Unlock()
 	}
+	// Event 102 (channel destroyed) or 104 (user left with clientSeq > 0 = real broadcaster,
+	// not a Media Push bot) while live → auto-stop all resources.
+	if eventType == 102 || (eventType == 104 && clientSeq > 0) {
+		s.mu.Lock()
+		shouldStop := s.session.State == model.StateLive && (channelName == "" || s.session.AgoraChannel == "" || channelName == s.session.AgoraChannel)
+		s.mu.Unlock()
+		if shouldStop {
+			logger.Infof("received agora channel event %d: channel=%q uid=%d — triggering auto-stop", eventType, channelName, uid)
+			go func() {
+				if _, err := s.Stop(context.Background()); err != nil {
+					logger.Errorf("auto-stop failed: %v", err)
+				}
+			}()
+		} else {
+			logger.Infof("received agora channel event %d: channel=%q uid=%d clientSeq=%d (no action taken)", eventType, channelName, uid, clientSeq)
+		}
+		return nil
+	}
+
 	// Only event 103 (broadcaster join) triggers business logic.
 	// All other events are logged for observability and acknowledged with 200 OK.
 	if eventType != 103 {
@@ -444,10 +463,11 @@ func (s *LiveService) HandleChannelWebhook(ctx context.Context, noticeID string,
 func (s *LiveService) Stop(ctx context.Context) (*model.StopResponse, error) {
 	s.mu.Lock()
 
-	if s.session.State == model.StateIdle {
+	if s.session.State == model.StateIdle || s.session.State == model.StateStopping {
+		state := s.session.State
 		s.mu.Unlock()
 		return &model.StopResponse{
-			State:   model.StateIdle,
+			State:   state,
 			Message: "no active session",
 		}, nil
 	}
