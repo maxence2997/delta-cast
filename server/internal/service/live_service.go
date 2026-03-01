@@ -4,9 +4,10 @@ package service
 import (
 	"context"
 	"fmt"
-	"github.com/maxence2997/delta-cast/server/internal/logger"
 	"sync"
 	"time"
+
+	"github.com/maxence2997/delta-cast/server/internal/logger"
 
 	"github.com/google/uuid"
 	"github.com/maxence2997/delta-cast/server/internal/model"
@@ -131,37 +132,11 @@ func (s *LiveService) allocateResources(sessionID string) {
 	var gcpInputURI string
 	if s.relay.GCPRelayEnabled {
 		wg.Go(func() {
-			logger.Infof("[GCP] creating input %s", inputID)
-			_, uri, err := s.gcp.CreateInput(ctx, inputID)
+			var err error
+			gcpInputURI, err = s.setupGCPResources(ctx, inputID, channelID)
 			if err != nil {
-				gcpErr = fmt.Errorf("gcp create input: %w", err)
-				return
+				gcpErr = err
 			}
-			gcpInputURI = uri
-			logger.Infof("[GCP] input ready, rtmp uri: %s", uri)
-
-			logger.Infof("[GCP] creating channel %s", channelID)
-			_, err = s.gcp.CreateChannel(ctx, channelID, inputID)
-			if err != nil {
-				gcpErr = fmt.Errorf("gcp create channel: %w", err)
-				return
-			}
-			logger.Infof("[GCP] channel created, starting...")
-
-			// StartChannel must be called before WaitForChannelReady.
-			// After CreateChannel the channel is in STOPPED state; only after
-			// StartChannel does it transition STARTING → AWAITING_INPUT.
-			if err := s.gcp.StartChannel(ctx, channelID); err != nil {
-				gcpErr = fmt.Errorf("gcp start channel: %w", err)
-				return
-			}
-			logger.Infof("[GCP] channel started, waiting for AWAITING_INPUT...")
-
-			if err := s.gcp.WaitForChannelReady(ctx, channelID); err != nil {
-				gcpErr = fmt.Errorf("gcp wait for channel: %w", err)
-				return
-			}
-			logger.Infof("[GCP] channel ready")
 		})
 	}
 
@@ -174,29 +149,11 @@ func (s *LiveService) allocateResources(sessionID string) {
 	)
 	if s.relay.YouTubeRelayEnabled {
 		wg.Go(func() {
-			logger.Infof("[YouTube] creating broadcast")
 			var err error
-			broadcastID, err = s.youtube.CreateBroadcast(ctx, fmt.Sprintf("DeltaCast Live %s", sessionID))
+			broadcastID, streamID, rtmpURL, streamKey, err = s.setupYouTubeResources(ctx, sessionID)
 			if err != nil {
-				ytErr = fmt.Errorf("youtube create broadcast: %w", err)
-				return
+				ytErr = err
 			}
-			logger.Infof("[YouTube] broadcast created: %s", broadcastID)
-
-			logger.Infof("[YouTube] creating stream")
-			streamID, rtmpURL, streamKey, err = s.youtube.CreateStream(ctx)
-			if err != nil {
-				ytErr = fmt.Errorf("youtube create stream: %w", err)
-				return
-			}
-			logger.Infof("[YouTube] stream created: %s", streamID)
-
-			logger.Infof("[YouTube] binding broadcast to stream")
-			if err := s.youtube.BindBroadcastToStream(ctx, broadcastID, streamID); err != nil {
-				ytErr = fmt.Errorf("youtube bind: %w", err)
-				return
-			}
-			logger.Infof("[YouTube] broadcast bound to stream, ready")
 		})
 	}
 
@@ -519,6 +476,64 @@ func (s *LiveService) Stop(ctx context.Context) (*model.StopResponse, error) {
 		State:     model.StateIdle,
 		Message:   "session stopped, all resources cleaned up",
 	}, nil
+}
+
+// setupGCPResources creates a GCP input and channel, starts the channel, and waits
+// until it reaches AWAITING_INPUT state. Returns the RTMP input URI on success.
+// Called in a goroutine by allocateResources.
+func (s *LiveService) setupGCPResources(ctx context.Context, inputID, channelID string) (string, error) {
+	logger.Infof("[GCP] creating input %s", inputID)
+	_, uri, err := s.gcp.CreateInput(ctx, inputID)
+	if err != nil {
+		return "", fmt.Errorf("gcp create input: %w", err)
+	}
+	logger.Infof("[GCP] input ready, rtmp uri: %s", uri)
+
+	logger.Infof("[GCP] creating channel %s", channelID)
+	if _, err = s.gcp.CreateChannel(ctx, channelID, inputID); err != nil {
+		return "", fmt.Errorf("gcp create channel: %w", err)
+	}
+	logger.Infof("[GCP] channel created, starting...")
+
+	// StartChannel must be called before WaitForChannelReady.
+	// After CreateChannel the channel is in STOPPED state; only after
+	// StartChannel does it transition STARTING → AWAITING_INPUT.
+	if err = s.gcp.StartChannel(ctx, channelID); err != nil {
+		return "", fmt.Errorf("gcp start channel: %w", err)
+	}
+	logger.Infof("[GCP] channel started, waiting for AWAITING_INPUT...")
+
+	if err = s.gcp.WaitForChannelReady(ctx, channelID); err != nil {
+		return "", fmt.Errorf("gcp wait for channel: %w", err)
+	}
+	logger.Infof("[GCP] channel ready")
+	return uri, nil
+}
+
+// setupYouTubeResources creates a YouTube broadcast and stream, then binds them.
+// Returns (broadcastID, streamID, rtmpURL, streamKey) on success.
+// Called in a goroutine by allocateResources.
+func (s *LiveService) setupYouTubeResources(ctx context.Context, sessionID string) (string, string, string, string, error) {
+	logger.Infof("[YouTube] creating broadcast")
+	broadcastID, err := s.youtube.CreateBroadcast(ctx, fmt.Sprintf("DeltaCast Live %s", sessionID))
+	if err != nil {
+		return "", "", "", "", fmt.Errorf("youtube create broadcast: %w", err)
+	}
+	logger.Infof("[YouTube] broadcast created: %s", broadcastID)
+
+	logger.Infof("[YouTube] creating stream")
+	streamID, rtmpURL, streamKey, err := s.youtube.CreateStream(ctx)
+	if err != nil {
+		return "", "", "", "", fmt.Errorf("youtube create stream: %w", err)
+	}
+	logger.Infof("[YouTube] stream created: %s", streamID)
+
+	logger.Infof("[YouTube] binding broadcast to stream")
+	if err = s.youtube.BindBroadcastToStream(ctx, broadcastID, streamID); err != nil {
+		return "", "", "", "", fmt.Errorf("youtube bind: %w", err)
+	}
+	logger.Infof("[YouTube] broadcast bound to stream, ready")
+	return broadcastID, streamID, rtmpURL, streamKey, nil
 }
 
 // Status returns the current session state and playback URLs.
