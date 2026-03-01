@@ -69,7 +69,7 @@ func (p *youtubeProvider) CreateBroadcast(ctx context.Context, title string) (st
 		},
 		ContentDetails: &youtube.LiveBroadcastContentDetails{
 			EnableAutoStart:   true,
-			EnableAutoStop:    false,
+			EnableAutoStop:    true,
 			LatencyPreference: "ultraLow",
 		},
 		Status: &youtube.LiveBroadcastStatus{

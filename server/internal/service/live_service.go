@@ -435,7 +435,6 @@ func (s *LiveService) HandleChannelWebhook(ctx context.Context, noticeID string,
 	channelName = s.session.AgoraChannel
 	gcpRTMPURL := s.session.GCPInputURI
 	ytRTMPURL := s.session.YouTubeRTMPURL
-	broadcastID := s.session.YouTubeBroadcastID
 	s.mu.Unlock()
 
 	var (
@@ -456,19 +455,15 @@ func (s *LiveService) HandleChannelWebhook(ctx context.Context, noticeID string,
 		}
 	}
 
-	// Start Media Push to YouTube and transition broadcast to live.
-	// TransitionBroadcast is only attempted when StartMediaPush succeeds, since
-	// the push must be running before YouTube will accept the "live" transition.
+	// Start Media Push to YouTube.
+	// EnableAutoStart=true on the broadcast lets YouTube auto-transition once
+	// it detects a healthy H.264 stream, so no explicit TransitionBroadcast is needed.
 	if s.relay.YouTubeRelayEnabled {
 		var err error
 		ytSID, err = s.agoraMediaPush.StartMediaPush(ctx, channelName+"_yt", channelName, uid, ytRTMPURL)
 		if err != nil {
 			logger.Errorf("media push to YouTube failed: %v", err)
 			ytFailed = true
-		} else {
-			if err := s.youtube.TransitionBroadcast(ctx, broadcastID, "live"); err != nil {
-				logger.Errorf("youtube transition to live failed: %v", err)
-			}
 		}
 	}
 

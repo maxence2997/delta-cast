@@ -95,7 +95,7 @@ export default function StreamerPage() {
       const AgoraRTC = await getAgoraRTC();
       const hostClient = AgoraRTC.createClient({
         mode: "live",
-        codec: "vp8",
+        codec: "h264",
         role: "host",
       });
       hostClientRef.current = hostClient;
