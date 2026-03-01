@@ -29,10 +29,16 @@ export default function HlsPlayer({ url }: HlsPlayerProps) {
       ],
     });
 
+    // Suppress errors that fire during disposal (e.g. MEDIA_ERR_SRC_NOT_SUPPORTED
+    // when the component unmounts while a source request is still in-flight).
+    player.on("error", () => {});
     playerRef.current = player;
 
     return () => {
       if (playerRef.current) {
+        // Reset source before disposing to prevent in-flight XHR from
+        // triggering a MEDIA_ERR_SRC_NOT_SUPPORTED error on unmount.
+        playerRef.current.reset();
         playerRef.current.dispose();
         playerRef.current = null;
       }
