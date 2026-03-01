@@ -320,7 +320,11 @@ func (s *LiveService) HandleChannelWebhook(ctx context.Context, eventType int, u
 	if s.session.State != model.StateReady {
 		state := s.session.State
 		s.mu.Unlock()
-		return fmt.Errorf("session is in %s state, expected ready for webhook", state)
+		// Return nil (200 OK) so Agora health checks and out-of-order events never receive a 5xx.
+		// This also handles the NCS health check case where channelName="test_webhook" and
+		// the session is always idle.
+		logger.Warnf("ignoring channel webhook event %d: session is in %s state (not ready)", eventType, state)
+		return nil
 	}
 
 	s.session.State = model.StateLive
