@@ -15,37 +15,50 @@ export default function HlsPlayer({ url }: HlsPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const playerRef = useRef<Player | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const delayRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // isAvailable: true once the .m3u8 URL responds with 2xx.
-  // Starts as false so we poll before handing the URL to video.js.
-  const [isAvailable, setIsAvailable] = useState(false);
+  // readyUrl holds the URL once the manifest responds with 2xx.
+  // isAvailable is derived: true only when readyUrl matches the current url.
+  // This avoids calling setState synchronously inside an effect body.
+  const [readyUrl, setReadyUrl] = useState<string | null>(null);
+  const isAvailable = readyUrl === url;
 
-  // Poll the .m3u8 URL with a HEAD request until it returns 2xx.
-  // Uses cache: 'no-store' to bypass Cloudflare CDN caching of the initial 404.
+  // Wait 10 s after receiving the URL before starting HEAD polling.
+  // This skips the window where the manifest is not yet provisioned.
+  // After the delay, poll every POLL_INTERVAL_MS until the manifest returns 2xx.
+  // Uses cache: 'no-store' to bypass CDN caching of 404 responses.
   useEffect(() => {
-    if (isAvailable) return;
-
     const check = async () => {
       try {
         const res = await fetch(url, { method: "HEAD", cache: "no-store" });
         if (res.ok) {
-          setIsAvailable(true);
+          setReadyUrl(url);
+          if (pollRef.current) {
+            clearInterval(pollRef.current);
+            pollRef.current = null;
+          }
         }
       } catch {
         // network error — keep retrying
       }
     };
 
-    check(); // immediate first check
-    pollRef.current = setInterval(check, POLL_INTERVAL_MS);
+    delayRef.current = setTimeout(() => {
+      check(); // first check immediately after the delay
+      pollRef.current = setInterval(check, POLL_INTERVAL_MS);
+    }, 10_000);
 
     return () => {
+      if (delayRef.current) {
+        clearTimeout(delayRef.current);
+        delayRef.current = null;
+      }
       if (pollRef.current) {
         clearInterval(pollRef.current);
         pollRef.current = null;
       }
     };
-  }, [url, isAvailable]);
+  }, [url]);
 
   // Initialise video.js only after the manifest is confirmed available.
   useEffect(() => {
@@ -72,7 +85,7 @@ export default function HlsPlayer({ url }: HlsPlayerProps) {
         playerRef.current.dispose();
         playerRef.current = null;
       }
-      setIsAvailable(false);
+      setReadyUrl(null);
     });
 
     playerRef.current = player;
