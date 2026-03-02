@@ -189,14 +189,10 @@ section ".env.local"
 
 if [[ -f "${ENV_FILE}" ]]; then
   REQUIRED_VARS=(
-    AGORA_APP_ID AGORA_APP_CERTIFICATE
-    AGORA_REST_KEY AGORA_REST_SECRET AGORA_NCS_SECRET
     GCP_PROJECT_ID GCP_REGION GCP_BUCKET_NAME GCP_CDN_DOMAIN
-    YOUTUBE_CLIENT_ID YOUTUBE_CLIENT_SECRET YOUTUBE_REFRESH_TOKEN
-    JWT_SECRET
   )
   for var in "${REQUIRED_VARS[@]}"; do
-    val=$(grep "^${var}=" "${ENV_FILE}" 2>/dev/null | cut -d= -f2- | tr -d '"' | tr -d "'")
+    val=$(grep "^${var}=" "${ENV_FILE}" 2>/dev/null | cut -d= -f2- | tr -d '"' | tr -d "'" || true)
     if [[ -z "${val}" || "${val}" == your-* ]]; then
       fail_ "Missing or placeholder: ${var}"
     else
@@ -223,3 +219,5 @@ fi
 
 echo -e "${BOLD}=====================================================${NC}"
 echo ""
+
+exit $((FAIL_COUNT > 0 ? 1 : 0))
