@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
-import TokenInputClient from "@/components/token-input-client";
+import AutoTokenInit from "@/components/auto-token-init";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -29,6 +29,7 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
+        <AutoTokenInit />
         <nav className="border-b border-gray-200 dark:border-gray-800 px-6 py-3 flex items-center gap-6">
           <Link href="/" className="font-bold text-lg">
             DeltaCast
@@ -39,7 +40,6 @@ export default function RootLayout({
           <Link href="/audience" className="text-sm hover:underline">
             Audience
           </Link>
-          <TokenInputClient />
         </nav>
         <main className="max-w-5xl mx-auto px-6 py-8">{children}</main>
       </body>
