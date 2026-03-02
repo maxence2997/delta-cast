@@ -160,6 +160,7 @@ curl -I http://<GCP_CDN_DOMAIN>/
 # 清除全部靜態資源
 ./script/gcp-teardown.sh
 
-# CDN 防護（IP 白名單 / 速率限制）
-./script/gcp-cdn-armor.sh --mode allowlist
+# CDN 防護（GCP 端 kill switch，Cloudflare Proxied 後 allowlist 已無效）
+./script/gcp-cdn-armor.sh --mode allow-all  # 測試期間開放
+./script/gcp-cdn-armor.sh --mode deny-all   # 非測試期間封鎖
 ```

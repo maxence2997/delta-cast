@@ -2,7 +2,7 @@
 # DeltaCast — Developer Makefile
 # ========================================
 
-.PHONY: help build run test lint fmt tidy vet web-dev web-build web-lint docker-up docker-down docker-build clean clean-all gcp-open gcp-open-public gcp-close gcp-status yt-status yt-open yt-close res-open res-open-public res-close res-status
+.PHONY: help build run test lint fmt tidy vet web-dev web-build web-lint docker-up docker-down docker-build clean clean-all gcp-open gcp-close gcp-status yt-status yt-open yt-close res-open res-close res-status
 
 # Default target
 help: ## Show available commands
@@ -91,21 +91,13 @@ gcp-status: ## Check GCP resource status (ready for test?)
 	@chmod +x script/gcp-status.sh
 	@./script/gcp-status.sh
 
-gcp-open: ## Open CDN for testing: allowlist your IP + unlock GCS bucket
+gcp-open: ## Open CDN for testing: allow-all traffic + unlock GCS bucket
 	@chmod +x script/gcp-cdn-armor.sh script/gcp-storage-secure.sh
-	@echo "\n\033[36m── Step 1/2: CDN → allowlist your IP ──\033[0m"
-	@./script/gcp-cdn-armor.sh --mode allowlist
-	@echo "\n\033[36m── Step 2/2: GCS → unlock public read ──\033[0m"
-	@./script/gcp-storage-secure.sh --mode unlock
-	@echo "\n\033[32m✅  Resources open for testing. Run 'make gcp-status' to verify.\033[0m\n"
-
-gcp-open-public: ## Open CDN to everyone (allow-all) + unlock GCS bucket
-	@chmod +x script/gcp-cdn-armor.sh script/gcp-storage-secure.sh
-	@echo "\n\033[36m── Step 1/2: CDN → allow all traffic ──\033[0m"
+	@echo "\n\033[36m── Step 1/2: CDN → allow all traffic (via Cloudflare) ──\033[0m"
 	@./script/gcp-cdn-armor.sh --mode allow-all
 	@echo "\n\033[36m── Step 2/2: GCS → unlock public read ──\033[0m"
 	@./script/gcp-storage-secure.sh --mode unlock
-	@echo "\n\033[32m✅  Resources fully open. Run 'make gcp-status' to verify.\033[0m\n"
+	@echo "\n\033[32m✅  Resources open for testing. Run 'make gcp-status' to verify.\033[0m\n"
 
 gcp-close: ## Close CDN after testing: deny-all + lock GCS bucket
 	@chmod +x script/gcp-cdn-armor.sh script/gcp-storage-secure.sh
@@ -135,19 +127,12 @@ yt-close: ## Lock YouTube after testing: set Broadcasts to private
 # Test Session Control (GCP + YouTube)
 # ----------------------------------------
 
-res-open: ## Open all resources for testing: allowlist IP + unlock GCS + unlock YT
+res-open: ## Open all resources for testing: allow-all CDN + unlock GCS + unlock YT
 	@echo "\n\033[36m════ res-open: GCP ════\033[0m"
 	@$(MAKE) gcp-open
 	@echo "\n\033[36m════ res-open: YouTube ════\033[0m"
 	@$(MAKE) yt-open
 	@echo "\n\033[32m✅  All resources open. Run 'make res-status' to verify.\033[0m\n"
-
-res-open-public: ## Open all resources to everyone: CDN allow-all + unlock GCS + unlock YT
-	@echo "\n\033[36m════ res-open-public: GCP ════\033[0m"
-	@$(MAKE) gcp-open-public
-	@echo "\n\033[36m════ res-open-public: YouTube ════\033[0m"
-	@$(MAKE) yt-open
-	@echo "\n\033[32m✅  All resources fully open. Run 'make res-status' to verify.\033[0m\n"
 
 res-close: ## Close all resources after testing: deny CDN + lock GCS + lock YT
 	@echo "\n\033[36m════ res-close: GCP ════\033[0m"
