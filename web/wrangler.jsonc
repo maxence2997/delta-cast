@@ -1,6 +1,6 @@
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
-	"name": "delta-cast-web",
+	"name": "delta-cast",
 	"main": ".open-next/worker.js",
 	"compatibility_date": "2026-02-18",
 	// 停用 workers.dev 子網域（透過 CF Dashboard 設定 custom domain）
