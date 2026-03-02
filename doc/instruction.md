@@ -36,8 +36,8 @@ delta-cast/
 │   └── workflows/
 │       ├── backend-workflow.yml         # 後端 CI/CD（測試 → Build & Push image 至 GHCR）
 │       ├── frontend-web-workflow.yml    # 前端 CI/CD（Lint → Type-check → Build & Deploy 至 CF Workers）
-│       ├── deploy-ios.yml               # iOS 部署腳本（未來）
-│       └── deploy-android.yml           # Android 部署腳本（未來）
+│       ├── frontend-ios-workflow.yml    # iOS 部署腳本（未來）
+│       └── frontend-android-workflow.yml # Android 部署腳本（未來）
 ├── docker-compose.yml          # 本地一次性啟動所有服務進行整合測試
 └── Makefile                    # 常用命令（如 `make run-server`, `make run-web`, `make test` 等）
 ```
