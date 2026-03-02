@@ -23,8 +23,15 @@ func setupRouter() *gin.Engine {
 }
 
 func generateToken(secret string, expiry time.Duration) string {
+	return generateTokenWithIssuer(secret, expiry, expectedIssuer)
+}
+
+func generateTokenWithIssuer(secret string, expiry time.Duration, issuer string) string {
 	claims := jwt.RegisteredClaims{
-		ExpiresAt: jwt.NewNumericDate(time.Now().Add(expiry)),
+		Issuer: issuer,
+	}
+	if expiry != 0 {
+		claims.ExpiresAt = jwt.NewNumericDate(time.Now().Add(expiry))
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	tokenStr, _ := token.SignedString([]byte(secret))
@@ -108,5 +115,47 @@ func TestJWTAuth_MalformedHeader(t *testing.T) {
 
 	if w.Code != http.StatusUnauthorized {
 		t.Errorf("expected 401, got %d", w.Code)
+	}
+}
+
+func TestJWTAuth_WrongIssuer(t *testing.T) {
+	r := setupRouter()
+	token := generateTokenWithIssuer(testSecret, time.Hour, "other-service")
+
+	req, _ := http.NewRequest("GET", "/protected", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401, got %d", w.Code)
+	}
+}
+
+func TestJWTAuth_MissingIssuer(t *testing.T) {
+	r := setupRouter()
+	token := generateTokenWithIssuer(testSecret, time.Hour, "")
+
+	req, _ := http.NewRequest("GET", "/protected", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401, got %d", w.Code)
+	}
+}
+
+func TestJWTAuth_NoExpiry_ValidIssuer(t *testing.T) {
+	r := setupRouter()
+	token := generateTokenWithIssuer(testSecret, 0, expectedIssuer)
+
+	req, _ := http.NewRequest("GET", "/protected", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", w.Code)
 	}
 }
