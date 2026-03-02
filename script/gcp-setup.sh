@@ -53,10 +53,13 @@ URL_MAP="deltacast-url-map"
 HTTP_PROXY="deltacast-http-proxy"
 FORWARDING_RULE="deltacast-http-rule"
 
-# Cloud DNS
-DNS_ZONE_NAME="${DNS_ZONE_NAME:-asia-east1}"
-DNS_ZONE_DNS_NAME="${DNS_ZONE_DNS_NAME:-cdn.deltacast.example.com.}"
+# Cloud DNS（僅在 GCP_SKIP_CLOUD_DNS != true 時執行，使用 Cloudflare DNS 管理者可跳過）
+DNS_ZONE_NAME="${DNS_ZONE_NAME:-deltacast-cdn}"
+# ⚠️  注意：Cloudflare 免費 Universal SSL 只涵蓋 *.your-domain（兩層），
+#     若使用三層子域（cdn.delta-cast.your-domain）請改為 cdn-delta-cast.your-domain
+DNS_ZONE_DNS_NAME="${DNS_ZONE_DNS_NAME:-cdn-delta-cast.your-domain.}"
 DNS_RECORD_TTL="${DNS_RECORD_TTL:-300}"
+SKIP_CLOUD_DNS="${GCP_SKIP_CLOUD_DNS:-true}"
 
 # ── 顏色輸出 ──────────────────────────────────────────────────────────────────
 RED='\033[0;31m'
@@ -135,9 +138,21 @@ else
   gcloud compute backend-buckets create "$BACKEND_BUCKET" \
     --gcs-bucket-name="$BUCKET_NAME" \
     --enable-cdn \
+    --custom-response-header='Access-Control-Allow-Origin:*' \
+    --custom-response-header='Access-Control-Allow-Methods:GET, HEAD' \
+    --custom-response-header='Access-Control-Allow-Headers:Content-Type, Range' \
     --quiet
   success "Backend Bucket 建立完成"
 fi
+
+# 確保 CORS response headers 已設定（idempotent，適用既有 bucket）
+info "更新 Backend Bucket CORS response headers..."
+gcloud compute backend-buckets update "$BACKEND_BUCKET" \
+  --custom-response-header='Access-Control-Allow-Origin:*' \
+  --custom-response-header='Access-Control-Allow-Methods:GET, HEAD' \
+  --custom-response-header='Access-Control-Allow-Headers:Content-Type, Range' \
+  --quiet
+success "Backend Bucket CORS response headers 已設定"
 
 # URL Map
 if gcloud compute url-maps describe "$URL_MAP" --quiet 2>/dev/null; then
@@ -210,49 +225,55 @@ else
   success "SA 金鑰已下載至：$SA_KEY_PATH"
 fi
 
-# ── Step 6：設定 Cloud DNS ───────────────────────────────────────────────────
+# ── Step 6：設定 Cloud DNS（使用 Cloudflare 時跳過）────────────────────────────
 echo ""
 info "════ Step 6：設定 Cloud DNS ════"
-
-# Managed Zone
-if gcloud dns managed-zones describe "$DNS_ZONE_NAME" --quiet 2>/dev/null; then
-  skip "DNS Managed Zone $DNS_ZONE_NAME 已存在"
-else
-  gcloud dns managed-zones create "$DNS_ZONE_NAME" \
-    --dns-name="$DNS_ZONE_DNS_NAME" \
-    --description="DeltaCast CDN domain" \
-    --quiet
-  success "DNS Managed Zone 建立完成：$DNS_ZONE_NAME ($DNS_ZONE_DNS_NAME)"
-fi
-
-# A Record → CDN IP（CDN_IP 已在 Step 3 取得）
 DNS_RECORD_NAME="${DNS_ZONE_DNS_NAME%%.}"  # 去掉尾部的點
-EXISTING_A=$(gcloud dns record-sets describe "${DNS_RECORD_NAME}." \
-  --zone="$DNS_ZONE_NAME" --type=A --format="value(rrdatas[0])" 2>/dev/null || true)
+NS_RECORDS=""
 
-if [[ "$EXISTING_A" == "$CDN_IP" ]]; then
-  skip "A Record 已指向正確 IP：$CDN_IP"
-elif [[ -n "$EXISTING_A" ]]; then
-  info "更新 A Record：$EXISTING_A → $CDN_IP"
-  gcloud dns record-sets update "${DNS_RECORD_NAME}." \
-    --zone="$DNS_ZONE_NAME" \
-    --type=A \
-    --ttl="$DNS_RECORD_TTL" \
-    --rrdatas="$CDN_IP" \
-    --quiet
-  success "A Record 已更新：${DNS_RECORD_NAME}. → $CDN_IP"
+if [[ "$SKIP_CLOUD_DNS" == "true" ]]; then
+  skip "GCP_SKIP_CLOUD_DNS=true，跳過 Cloud DNS 設定（你正在使用 Cloudflare 管理 DNS）"
+  info "請確認 Cloudflare 已建立 A Record：${DNS_RECORD_NAME} → ${CDN_IP}"
 else
-  gcloud dns record-sets create "${DNS_RECORD_NAME}." \
-    --zone="$DNS_ZONE_NAME" \
-    --type=A \
-    --ttl="$DNS_RECORD_TTL" \
-    --rrdatas="$CDN_IP" \
-    --quiet
-  success "A Record 建立完成：${DNS_RECORD_NAME}. → $CDN_IP"
-fi
+  # Managed Zone
+  if gcloud dns managed-zones describe "$DNS_ZONE_NAME" --quiet 2>/dev/null; then
+    skip "DNS Managed Zone $DNS_ZONE_NAME 已存在"
+  else
+    gcloud dns managed-zones create "$DNS_ZONE_NAME" \
+      --dns-name="$DNS_ZONE_DNS_NAME" \
+      --description="DeltaCast CDN domain" \
+      --quiet
+    success "DNS Managed Zone 建立完成：$DNS_ZONE_NAME ($DNS_ZONE_DNS_NAME)"
+  fi
 
-NS_RECORDS=$(gcloud dns record-sets describe "${DNS_RECORD_NAME}." \
-  --zone="$DNS_ZONE_NAME" --type=NS --format="value(rrdatas)" 2>/dev/null || true)
+  # A Record → CDN IP（CDN_IP 已在 Step 3 取得）
+  EXISTING_A=$(gcloud dns record-sets describe "${DNS_RECORD_NAME}." \
+    --zone="$DNS_ZONE_NAME" --type=A --format="value(rrdatas[0])" 2>/dev/null || true)
+
+  if [[ "$EXISTING_A" == "$CDN_IP" ]]; then
+    skip "A Record 已指向正確 IP：$CDN_IP"
+  elif [[ -n "$EXISTING_A" ]]; then
+    info "更新 A Record：$EXISTING_A → $CDN_IP"
+    gcloud dns record-sets update "${DNS_RECORD_NAME}." \
+      --zone="$DNS_ZONE_NAME" \
+      --type=A \
+      --ttl="$DNS_RECORD_TTL" \
+      --rrdatas="$CDN_IP" \
+      --quiet
+    success "A Record 已更新：${DNS_RECORD_NAME}. → $CDN_IP"
+  else
+    gcloud dns record-sets create "${DNS_RECORD_NAME}." \
+      --zone="$DNS_ZONE_NAME" \
+      --type=A \
+      --ttl="$DNS_RECORD_TTL" \
+      --rrdatas="$CDN_IP" \
+      --quiet
+    success "A Record 建立完成：${DNS_RECORD_NAME}. → $CDN_IP"
+  fi
+
+  NS_RECORDS=$(gcloud dns record-sets describe "${DNS_RECORD_NAME}." \
+    --zone="$DNS_ZONE_NAME" --type=NS --format="value(rrdatas)" 2>/dev/null || true)
+fi
 
 # ── 完成摘要 ──────────────────────────────────────────────────────────────────
 echo ""
@@ -275,9 +296,15 @@ if [[ -n "${NS_RECORDS:-}" ]]; then
   echo "  $NS_RECORDS" | tr ',' '\n' | sed 's/^ */  /'
   echo ""
 fi
+if [[ "$SKIP_CLOUD_DNS" == "true" ]]; then
+  echo -e "${YELLOW}Cloudflare DNS 提醒：${NC}"
+  echo "  1. A Record：${DNS_RECORD_NAME} → ${CDN_IP}（Proxied 橘色雲）"
+  echo "  2. Cache Rules → 新增規則：URI Path ends with .m3u8 → Bypass cache"
+  echo ""
+fi
 echo "系統環境變數（加入 ~/.zshrc 或 ~/.bashrc）："
 echo "  export GCP_SA_KEY_PATH=$SA_KEY_PATH"
 echo ""
 warn "⚠️  $SA_KEY_PATH 是敏感檔案，勿加入版本控制。"
 warn "⚠️  CDN IP 可能需要幾分鐘才能生效。"
-warn "⚠️  若使用自訂域名，請確認 NS Record 已委派給 GCP Cloud DNS。"
+warn "⚠️  Cloudflare Proxied 模式下，請勿開啟 Hotlink Protection（直到前端也綁定同 Zone 的自訂域名）。"
