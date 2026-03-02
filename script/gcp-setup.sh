@@ -7,6 +7,7 @@
 #   2. 建立 GCS Bucket（公開讀取 + CORS）
 #   3. 建立 Cloud CDN（Backend Bucket + URL Map + HTTP Proxy + Forwarding Rule）
 #   4. 建立 Service Account 並授予 IAM 角色
+#   4.5 授予 Livestream Service Agent GCS 寫入權限（HLS segment 輸出必要）
 #   5. 下載 SA 金鑰 → ~/deltacast-sa-key.json
 #
 # 前置需求：gcloud CLI 已登入（gcloud auth login）
@@ -211,6 +212,20 @@ for role in "roles/livestream.editor" "roles/storage.objectAdmin"; do
     --quiet 2>/dev/null
   success "已授予 $role"
 done
+
+# ── Step 4.5：授予 Livestream Service Agent GCS 寫入權限 ────────────────────────
+# GCP Livestream API 使用專屬的 Service Agent 帳號寫入 HLS segment 到 GCS。
+# 這個帳號與應用程式 SA 不同，必須單獨授予 bucket 層級的 objectAdmin 權限。
+# 若未授權，channel 進入 STREAMING 狀態後會靜默失敗，bucket 內不會出現任何檔案。
+echo ""
+info "════ Step 4.5：授予 Livestream Service Agent GCS 寫入權限 ════"
+
+PROJECT_NUMBER=$(gcloud projects describe "$PROJECT_ID" --format="get(projectNumber)")
+LIVESTREAM_SA="service-${PROJECT_NUMBER}@gcp-sa-livestream.iam.gserviceaccount.com"
+
+info "Livestream Service Agent：$LIVESTREAM_SA"
+gsutil iam ch "serviceAccount:${LIVESTREAM_SA}:objectAdmin" "gs://$BUCKET_NAME"
+success "Livestream Service Agent 已獲得 gs://$BUCKET_NAME 的 objectAdmin 權限"
 
 # ── Step 5：下載 SA 金鑰 ──────────────────────────────────────────────────────
 echo ""
