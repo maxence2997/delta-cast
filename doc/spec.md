@@ -4,7 +4,6 @@
 
 驗證「一進多出」直播流轉發架構的可行性。直播主透過 Agora 推流至頻道，由後端（Golang）協調將流轉發（Media Push）至 YouTube 與 Google Cloud Live Stream API，最終實現跨平台（Web, YouTube, Mobile）的收視與存檔。
 
-> [!IMPORTANT]
 > **POC 限制：單一 Session，無房間概念**
 > 本系統目前僅支援**單一活躍 Session**，不具備多房間或多頻道的概念。同一時間只能有一組 `prepare → start → stop` 流程在運作，前端無需也不存在「選擇房間」的邏輯。所有 API 操作均針對這唯一的全域 Session 進行。
 
