@@ -9,6 +9,7 @@
 		}
 	],
 	"github-actions.workflows.pinned.workflows": [
-		".github/workflows/backend-workflow.yml"
+		".github/workflows/backend-workflow.yml",
+		".github/workflows/frontend-web-workflow.yml"
 	]
 }
