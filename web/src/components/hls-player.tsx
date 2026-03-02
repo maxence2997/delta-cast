@@ -65,7 +65,7 @@ export default function HlsPlayer({ url }: HlsPlayerProps) {
     if (!isAvailable || !videoRef.current) return;
 
     const player = videojs(videoRef.current, {
-      autoplay: true,
+      autoplay: "any",
       controls: true,
       fluid: true,
       liveui: true,
