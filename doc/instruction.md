@@ -126,7 +126,7 @@ Commit message 詳細格式規範請參閱 [.github/commit-message-instructions.
 
 1. 複製 `web/.env.example` 到 `web/.env.local`。
 2. 填入 `NEXT_PUBLIC_API_URL`（本機開發為 `http://localhost:8080`，生產環境為後端服務網域）。
-3. 填入 `NEXT_PUBLIC_API_TOKEN`（本機開發可使用 `server/` 的 `JWT_SECRET` 手動簽發，生產環境透過 GitHub Secrets 注入）。
+3. 填入 `API_TOKEN`（本機開發可使用 `server/` 的 `JWT_SECRET` 手動簽發，生產環境透過 GitHub Secrets 注入）。
 
 > **禁止將 `.env` 加入版本控制**（已在 `.gitignore` 中排除）。
 
