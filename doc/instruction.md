@@ -34,10 +34,10 @@ delta-cast/
 ├── shared/                     # 存放 Proto 定義或統一的轉碼參數 JSON（若有）
 ├── .github/                    # GitHub Actions 自動化腳本
 │   └── workflows/
-│       ├── backed-workflow.yml # 後端 CI/CD（測試 → Build & Push image 至 GHCR）
-│       ├── deploy-web.yml      # 前端部署腳本（未來）
-│       ├── deploy-ios.yml      # iOS 部署腳本（未來）
-│       └── deploy-android.yml  # Android 部署腳本（未來）
+│       ├── backend-workflow.yml         # 後端 CI/CD（測試 → Build & Push image 至 GHCR）
+│       ├── frontend-web-workflow.yml    # 前端 CI/CD（Lint → Type-check → Build & Deploy 至 CF Workers）
+│       ├── deploy-ios.yml               # iOS 部署腳本（未來）
+│       └── deploy-android.yml           # Android 部署腳本（未來）
 ├── docker-compose.yml          # 本地一次性啟動所有服務進行整合測試
 └── Makefile                    # 常用命令（如 `make run-server`, `make run-web`, `make test` 等）
 ```
@@ -125,7 +125,8 @@ Commit message 詳細格式規範請參閱 [.github/commit-message-instructions.
 **前端**
 
 1. 複製 `web/.env.example` 到 `web/.env.local`。
-2. 填入 `NEXT_PUBLIC_API_URL`（本機開發為 `http://localhost:8080`，生產環境為 Railway 網域）。
+2. 填入 `NEXT_PUBLIC_API_URL`（本機開發為 `http://localhost:8080`，生產環境為後端服務網域）。
+3. 填入 `NEXT_PUBLIC_API_TOKEN`（本機開發可使用 `server/` 的 `JWT_SECRET` 手動簽發，生產環境透過 GitHub Secrets 注入）。
 
 > **禁止將 `.env` 加入版本控制**（已在 `.gitignore` 中排除）。
 

@@ -43,9 +43,9 @@
 
 ### 3.1 認證機制
 
-- 所有 API 端點（Webhook 除外）需帶上 `Authorization: Bearer <JWT>` 標頭。
-- JWT 使用 HS256 簽發，POC 階段以固定 secret 驗證，不做使用者系統。
-- Agora Webhook 端點透過 Agora 簽章驗證（Agora Notification Callback Service 簽章機制）。
+- **層 1 — 前端存取控制**：CF Zero Trust Access 擋於網路層，未認證者無法碰到前端站點。專用 Google / GitHub OAuth + email 白名單驗證。
+- **層 2 — API 認證**：所有後端 API 端點（Webhook 除外）需帶上 `Authorization: Bearer <JWT>` 標頭。JWT 使用 HS256 簽發，POC 階段以固定 secret 驗證，不做使用者系統。前端透過 `NEXT_PUBLIC_API_TOKEN` 環境變數載入長效静態 admin JWT。
+- **Agora Webhook**：透過 Agora 簽章驗證（Agora Notification Callback Service 簽章機制）。
 
 ### 3.2 Session 管理
 
