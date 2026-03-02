@@ -297,6 +297,9 @@ func (s *LiveService) Start(ctx context.Context, appID string) (*model.StartResp
 
 // HandleMediaPushWebhook processes Agora Media Push notification events (productId=5).
 // Event types: 1=ConverterCreated, 2=ConverterConfigChanged, 3=ConverterStateChanged, 4=ConverterDestroyed.
+// On converter failure (event 3, state "failed") or unexpected destruction (event 4, reason
+// "Internal Error"), the session is reset from live → ready so that the next broadcaster-join
+// (eventType=103) can restart Media Push without requiring a full stop/prepare cycle.
 // noticeID is used for deduplication: duplicate deliveries of the same notification are silently ignored.
 func (s *LiveService) HandleMediaPushWebhook(_ context.Context, noticeID string, eventType int, converterID, converterState, destroyReason string) error {
 	if noticeID != "" {
@@ -319,13 +322,15 @@ func (s *LiveService) HandleMediaPushWebhook(_ context.Context, noticeID string,
 		case "running":
 			logger.Infof("media push converter running: id=%s", converterID)
 		case "failed":
-			logger.Errorf("media push converter failed: id=%s", converterID)
+			logger.Errorf("media push converter failed: id=%s — resetting session to ready", converterID)
+			s.resetConverterToReady(converterID)
 		default:
 			logger.Infof("media push converter state changed: id=%s state=%s", converterID, converterState)
 		}
 	case 4:
 		if destroyReason == "Internal Error" {
-			logger.Errorf("media push converter destroyed unexpectedly: id=%s reason=%s", converterID, destroyReason)
+			logger.Errorf("media push converter destroyed unexpectedly: id=%s reason=%s — resetting session to ready", converterID, destroyReason)
+			s.resetConverterToReady(converterID)
 		} else {
 			logger.Infof("media push converter destroyed: id=%s reason=%s", converterID, destroyReason)
 		}
@@ -333,6 +338,30 @@ func (s *LiveService) HandleMediaPushWebhook(_ context.Context, noticeID string,
 		logger.Infof("media push unknown event type %d: id=%s", eventType, converterID)
 	}
 	return nil
+}
+
+// resetConverterToReady transitions the session from live → ready when a Media Push converter
+// fails or is unexpectedly destroyed. This allows the next broadcaster-join event (eventType=103)
+// to restart Media Push without requiring a full stop/prepare cycle.
+// The GCP channel and YouTube broadcast remain active; only the failed converter SID is cleared.
+// If the session is not live, this is a no-op.
+func (s *LiveService) resetConverterToReady(converterID string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.session.State != model.StateLive {
+		return
+	}
+	// Clear the SID of the dead converter so Stop() does not try to stop it again.
+	if s.relay.GCPRelayEnabled && converterID == s.session.MediaPushGCPSID {
+		s.session.MediaPushGCPSID = ""
+	}
+	if s.relay.YouTubeRelayEnabled && converterID == s.session.MediaPushYouTubeSID {
+		s.session.MediaPushYouTubeSID = ""
+	}
+	// Reset clientSeq deduplication so the same broadcaster-join event can be reprocessed.
+	s.session.LastBroadcasterClientSeq = 0
+	s.session.State = model.StateReady
+	logger.Warnf("session reset live→ready: converter %s failed/destroyed; next broadcaster-join will restart Media Push", converterID)
 }
 
 // HandleChannelWebhook processes Agora RTC Channel NCS events (productId=1).
