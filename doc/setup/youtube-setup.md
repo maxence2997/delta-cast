@@ -63,11 +63,69 @@ curl -X POST https://oauth2.googleapis.com/token \
 
 ## 環境變數對應
 
+### 個人帳號模式（預設）
+
 | 環境變數                | 取自位置                                                         | 備註                                 |
 | ----------------------- | ---------------------------------------------------------------- | ------------------------------------ |
 | `YOUTUBE_CLIENT_ID`     | APIs & Services → Credentials → OAuth 2.0 Client → Client ID     | 結尾為 `.apps.googleusercontent.com` |
 | `YOUTUBE_CLIENT_SECRET` | APIs & Services → Credentials → OAuth 2.0 Client → Client Secret |                                      |
 | `YOUTUBE_REFRESH_TOKEN` | OAuth Playground 或 cURL 手動換取                                | 永不過期，換 access token 用         |
+
+### 企業帳號模式（Google Workspace + DWD）
+
+| 環境變數                    | 說明                                                            |
+| --------------------------- | --------------------------------------------------------------- |
+| `YOUTUBE_IMPERSONATE_EMAIL` | 被代理的頻道擁有者 email，設定後自動切換至 DWD 模式            |
+| `YOUTUBE_SA_KEY_PATH`       | SA key JSON 檔路徑（標準 SA key 格式，不支援 WIF config）       |
+| `YOUTUBE_SA_KEY_JSON`       | SA key JSON inline 內容，無法掛檔時的 fallback                  |
+
+設定 `YOUTUBE_IMPERSONATE_EMAIL` 後，`YOUTUBE_CLIENT_ID`、`YOUTUBE_CLIENT_SECRET`、`YOUTUBE_REFRESH_TOKEN` 均可留空。
+
+---
+
+## 2.5 企業帳號：Domain-Wide Delegation（Google Workspace）
+
+適用場景：公司 Google Workspace 環境，以 Service Account 代理頻道擁有者帳號操作 YouTube，
+不需 OAuth2 consent flow，不需 refresh token。
+
+### 前置條件
+
+- 使用的 SA 已有 SA private key（`YOUTUBE_SA_KEY_PATH` 或 `YOUTUBE_SA_KEY_JSON` 指向 SA key JSON）
+  - **注意**：DWD 不支援 WIF external_account config，必須是標準 SA key JSON
+- 頻道擁有者帳號屬於同一 Google Workspace org
+
+### 步驟
+
+**1. 取得 SA 的 Client ID**
+
+```bash
+gcloud iam service-accounts describe deltacast-server@YOUR_PROJECT_ID.iam.gserviceaccount.com \
+  --format="value(oauth2ClientId)"
+```
+
+**2. 在 Google Admin Console 設定 DWD**
+
+1. 前往 [Google Admin Console](https://admin.google.com/) → **Security** → **Access and data control** → **API controls** → **Manage Domain Wide Delegation**
+2. 點選 **Add new** → 填入上一步取得的 SA Client ID
+3. OAuth Scopes 填入：`https://www.googleapis.com/auth/youtube`
+4. 儲存
+
+**3. 設定環境變數**
+
+```bash
+# SA key（與 GCP 共用同一個 SA 即可）
+YOUTUBE_SA_KEY_PATH=/path/to/deltacast-sa-key.json
+
+# 頻道擁有者 email（被代理的對象）
+YOUTUBE_IMPERSONATE_EMAIL=channel-owner@company.com
+
+# OAuth2 三個變數可留空
+# YOUTUBE_CLIENT_ID=
+# YOUTUBE_CLIENT_SECRET=
+# YOUTUBE_REFRESH_TOKEN=
+```
+
+程式啟動後 log 會顯示 `youtube auth initialized mode="SA DWD" subject="channel-owner@company.com"` 確認生效。
 
 ---
 

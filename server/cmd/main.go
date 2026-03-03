@@ -26,7 +26,22 @@ func main() {
 	agoraChannelNCSProvider := provider.NewAgoraChannelNCSProvider(cfg.AgoraChannelNCSSecret)
 	agoraMediaPushNCSProvider := provider.NewAgoraMediaPushNCSProvider(cfg.AgoraMediaPushNCSSecret)
 	gcpProvider := provider.NewGCPLiveStreamProvider(cfg.GCPProjectID, cfg.GCPRegion, cfg.GCPBucketName, cfg.GCPCDNDomain, cfg.GCPSAKeyPath, cfg.GCPSAKeyJSON, cfg.GCPSAImpersonateEmail)
-	youtubeProvider := provider.NewYouTubeProvider(cfg.YouTubeClientID, cfg.YouTubeClientSecret, cfg.YouTubeRefreshToken)
+
+	var ytAuth provider.YouTubeAuth
+	if cfg.YouTubeImpersonateEmail != "" {
+		ytAuth = provider.EnterpriseYouTubeAuth{
+			SAKeyPath:        cfg.YouTubeSAKeyPath,
+			SAKeyJSON:        cfg.YouTubeSAKeyJSON,
+			ImpersonateEmail: cfg.YouTubeImpersonateEmail,
+		}
+	} else {
+		ytAuth = provider.PersonalYouTubeAuth{
+			ClientID:     cfg.YouTubeClientID,
+			ClientSecret: cfg.YouTubeClientSecret,
+			RefreshToken: cfg.YouTubeRefreshToken,
+		}
+	}
+	youtubeProvider := provider.NewYouTubeProvider(ytAuth)
 
 	// Service
 	liveSvc := service.NewLiveService(agoraTokenProvider, agoraMediaPushProvider, agoraChannelProvider, gcpProvider, youtubeProvider, service.RelayOptions{

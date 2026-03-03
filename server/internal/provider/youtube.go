@@ -3,6 +3,8 @@ package provider
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"os"
 	"time"
 
 	"golang.org/x/oauth2"
@@ -11,20 +13,55 @@ import (
 	"google.golang.org/api/youtube/v3"
 )
 
+// YouTubeAuth is a sealed interface representing a YouTube authentication strategy.
+// Use [PersonalYouTubeAuth] for individual Google accounts (OAuth2 refresh token),
+// or [EnterpriseYouTubeAuth] for Google Workspace accounts (SA + Domain-Wide Delegation).
+type YouTubeAuth interface {
+	youtubeAuth() // sealed — only types in this package can implement
+}
+
+// PersonalYouTubeAuth authenticates using an OAuth2 refresh token obtained via
+// Google's consent screen. Used for individual (non-Workspace) Google accounts.
+// All three fields are required.
+type PersonalYouTubeAuth struct {
+	ClientID     string
+	ClientSecret string
+	RefreshToken string
+}
+
+func (PersonalYouTubeAuth) youtubeAuth() {}
+
+// EnterpriseYouTubeAuth authenticates via Service Account + Domain-Wide Delegation (DWD).
+// The SA impersonates the target Google Workspace user to operate their YouTube channel.
+//
+// Prerequisites:
+//   - The SA key must be a standard SA key JSON (not a WIF external_account config).
+//   - A Google Workspace org admin must grant the SA DWD access to
+//     https://www.googleapis.com/auth/youtube in Google Admin Console.
+type EnterpriseYouTubeAuth struct {
+	// SAKeyPath is the file path to the SA private key JSON file.
+	// Takes priority over SAKeyJSON when both are set.
+	SAKeyPath string
+	// SAKeyJSON is the full inline content of the SA private key JSON.
+	// Used as fallback when file mounting is unavailable (e.g. PaaS).
+	SAKeyJSON string
+	// ImpersonateEmail is the Google Workspace user email whose YouTube channel
+	// will be operated on behalf of. Must belong to the same Workspace org.
+	ImpersonateEmail string
+}
+
+func (EnterpriseYouTubeAuth) youtubeAuth() {}
+
 type youtubeProvider struct {
-	clientID     string
-	clientSecret string
-	refreshToken string
-	service      *youtube.Service
+	auth    YouTubeAuth
+	service *youtube.Service
 }
 
 // NewYouTubeProvider creates a new YouTubeProvider.
-func NewYouTubeProvider(clientID, clientSecret, refreshToken string) YouTubeProvider {
-	return &youtubeProvider{
-		clientID:     clientID,
-		clientSecret: clientSecret,
-		refreshToken: refreshToken,
-	}
+// Pass a [PersonalYouTubeAuth] for individual account mode,
+// or an [EnterpriseYouTubeAuth] for Google Workspace + DWD mode.
+func NewYouTubeProvider(auth YouTubeAuth) YouTubeProvider {
+	return &youtubeProvider{auth: auth}
 }
 
 func (p *youtubeProvider) getService(ctx context.Context) (*youtube.Service, error) {
@@ -32,21 +69,53 @@ func (p *youtubeProvider) getService(ctx context.Context) (*youtube.Service, err
 		return p.service, nil
 	}
 
-	config := &oauth2.Config{
-		ClientID:     p.clientID,
-		ClientSecret: p.clientSecret,
-		Endpoint:     google.Endpoint,
-		Scopes:       []string{youtube.YoutubeForceSslScope},
-	}
+	var (
+		svc *youtube.Service
+		err error
+	)
 
-	token := &oauth2.Token{
-		RefreshToken: p.refreshToken,
-	}
+	switch a := p.auth.(type) {
+	case EnterpriseYouTubeAuth:
+		// Enterprise mode: SA + Domain-Wide Delegation.
+		// A JWT is signed with the SA private key and the Subject field is set to
+		// the target user's email, delegating their YouTube identity to this service.
+		var jsonData []byte
+		if a.SAKeyPath != "" {
+			jsonData, err = os.ReadFile(a.SAKeyPath)
+			if err != nil {
+				return nil, fmt.Errorf("read sa key for youtube DWD: %w", err)
+			}
+		} else {
+			jsonData = []byte(a.SAKeyJSON)
+		}
+		jwtCfg, err := google.JWTConfigFromJSON(jsonData, youtube.YoutubeForceSslScope)
+		if err != nil {
+			return nil, fmt.Errorf("parse sa key for youtube DWD: %w", err)
+		}
+		jwtCfg.Subject = a.ImpersonateEmail
+		svc, err = youtube.NewService(ctx, option.WithHTTPClient(jwtCfg.Client(ctx)))
+		if err != nil {
+			return nil, fmt.Errorf("create youtube service (DWD): %w", err)
+		}
+		slog.InfoContext(ctx, "youtube auth initialized", "mode", "SA DWD", "subject", a.ImpersonateEmail)
 
-	tokenSource := config.TokenSource(context.Background(), token)
-	svc, err := youtube.NewService(context.Background(), option.WithTokenSource(tokenSource))
-	if err != nil {
-		return nil, fmt.Errorf("create youtube service: %w", err)
+	case PersonalYouTubeAuth:
+		// Personal mode: OAuth2 refresh token representing the channel owner.
+		cfg := &oauth2.Config{
+			ClientID:     a.ClientID,
+			ClientSecret: a.ClientSecret,
+			Endpoint:     google.Endpoint,
+			Scopes:       []string{youtube.YoutubeForceSslScope},
+		}
+		ts := cfg.TokenSource(context.Background(), &oauth2.Token{RefreshToken: a.RefreshToken})
+		svc, err = youtube.NewService(context.Background(), option.WithTokenSource(ts))
+		if err != nil {
+			return nil, fmt.Errorf("create youtube service: %w", err)
+		}
+		slog.InfoContext(ctx, "youtube auth initialized", "mode", "OAuth2 refresh token")
+
+	default:
+		return nil, fmt.Errorf("unknown YouTubeAuth type: %T", p.auth)
 	}
 
 	p.service = svc

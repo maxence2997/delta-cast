@@ -69,6 +69,19 @@ type Config struct {
 	YouTubeClientID     string
 	YouTubeClientSecret string
 	YouTubeRefreshToken string
+	// YouTubeImpersonateEmail switches YouTube auth to enterprise mode (SA + DWD).
+	// When set, YOUTUBE_CLIENT_ID / SECRET / REFRESH_TOKEN are not required.
+	// Leave empty to use personal account mode (OAuth2 refresh token).
+	YouTubeImpersonateEmail string
+	// YouTubeSAKeyPath is the file path to the SA private key JSON used for YouTube DWD.
+	// Only applicable when YouTubeImpersonateEmail is set.
+	// Must be a standard SA key JSON — WIF external_account config is not supported for DWD.
+	// Falls back to YouTubeSAKeyJSON if empty.
+	YouTubeSAKeyPath string
+	// YouTubeSAKeyJSON is the full inline content of the SA private key JSON for YouTube DWD.
+	// Only applicable when YouTubeImpersonateEmail is set.
+	// Used as fallback when file mounting is unavailable (e.g. PaaS).
+	YouTubeSAKeyJSON string
 
 	// TrustedProxies is the list of CIDR ranges or IPs that Gin trusts as reverse proxies.
 	// Leave nil (unset) for local development. In production behind a Load Balancer,
@@ -115,6 +128,9 @@ func Load() (*Config, error) {
 		YouTubeClientID:         os.Getenv("YOUTUBE_CLIENT_ID"),
 		YouTubeClientSecret:     os.Getenv("YOUTUBE_CLIENT_SECRET"),
 		YouTubeRefreshToken:     os.Getenv("YOUTUBE_REFRESH_TOKEN"),
+		YouTubeImpersonateEmail: os.Getenv("YOUTUBE_IMPERSONATE_EMAIL"),
+		YouTubeSAKeyPath:        os.Getenv("YOUTUBE_SA_KEY_PATH"),
+		YouTubeSAKeyJSON:        os.Getenv("YOUTUBE_SA_KEY_JSON"),
 		YouTubeRelayEnabled:     getEnvBool("YOUTUBE_RELAY_ENABLED", true),
 		TrustedProxies:          getEnvStringSlice("TRUSTED_PROXIES", nil),
 		CORSOrigins:             getEnvStringSlice("CORS_ORIGINS", []string{"http://localhost:3000", "http://localhost:3001"}),
@@ -149,9 +165,17 @@ func (c *Config) validate() error {
 	}
 
 	if c.YouTubeRelayEnabled {
-		required["YOUTUBE_CLIENT_ID"] = c.YouTubeClientID
-		required["YOUTUBE_CLIENT_SECRET"] = c.YouTubeClientSecret
-		required["YOUTUBE_REFRESH_TOKEN"] = c.YouTubeRefreshToken
+		if c.YouTubeImpersonateEmail != "" {
+			// Enterprise DWD mode: SA key is required; OAuth2 fields are not needed.
+			if c.YouTubeSAKeyPath == "" && c.YouTubeSAKeyJSON == "" {
+				return fmt.Errorf("YOUTUBE_IMPERSONATE_EMAIL is set but neither YOUTUBE_SA_KEY_PATH nor YOUTUBE_SA_KEY_JSON is provided (SA private key required for DWD)")
+			}
+		} else {
+			// Personal OAuth2 mode.
+			required["YOUTUBE_CLIENT_ID"] = c.YouTubeClientID
+			required["YOUTUBE_CLIENT_SECRET"] = c.YouTubeClientSecret
+			required["YOUTUBE_REFRESH_TOKEN"] = c.YouTubeRefreshToken
+		}
 	}
 
 	for key, val := range required {
