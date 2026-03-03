@@ -224,16 +224,18 @@ func (s *LiveService) allocateResources(sessionID string) {
 		cleanupPartialResources()
 		return
 	}
-	defer s.mu.Unlock()
-
 	if gcpErr != nil {
 		logger.Errorf("resource allocation failed (GCP): %v", gcpErr)
 		s.session.State = model.StateIdle
+		s.mu.Unlock()
+		cleanupPartialResources()
 		return
 	}
 	if ytErr != nil {
 		logger.Errorf("resource allocation failed (YouTube): %v", ytErr)
 		s.session.State = model.StateIdle
+		s.mu.Unlock()
+		cleanupPartialResources()
 		return
 	}
 
