@@ -20,7 +20,7 @@ flowchart LR
     NCS["Agora NCS Webhook"]
     API["DeltaCast Server"]
     MP["Agora Media Push"]
-    YT["YouTube Live\n（RTMP）"]
+    YT["YouTube Live（RTMP）"]
     GCP["GCP Live Stream API <br> +  GCS + Cloud CDN"]
     YTPlayer["YouTube 播放器"]
     HLSPlayer["HLS 播放器"]
