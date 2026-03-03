@@ -43,8 +43,8 @@ func (p *youtubeProvider) getService(ctx context.Context) (*youtube.Service, err
 		RefreshToken: p.refreshToken,
 	}
 
-	tokenSource := config.TokenSource(ctx, token)
-	svc, err := youtube.NewService(ctx, option.WithTokenSource(tokenSource))
+	tokenSource := config.TokenSource(context.Background(), token)
+	svc, err := youtube.NewService(context.Background(), option.WithTokenSource(tokenSource))
 	if err != nil {
 		return nil, fmt.Errorf("create youtube service: %w", err)
 	}
