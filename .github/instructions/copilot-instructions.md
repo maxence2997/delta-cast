@@ -44,6 +44,7 @@ docker-compose -f docker-compose.local.yml up
 
 - **Go**: `gofmt`/`goimports`, snake_case filenames (`live_service.go`), GoDoc on public functions, `if err != nil` error handling (no panic), secrets from env vars only.
 - **TypeScript/React**: ESLint + Prettier, kebab-case filenames (`live-player.tsx`), functional components + hooks only.
+- **Markdown**: No emojis in documentation files. In Mermaid diagrams, use `<br>` for line breaks inside node labels — never `\n`.
 - **Git**: Follow the commit message rules defined in [.github/instructions/commit-message-instructions.md](../../.github/instructions/commit-message-instructions.md). Headers and body must be in Traditional Chinese. Each commit must represent exactly one logical change.
 - **Tests**: Co-located with source (`_test.go` / `.test.ts`). Cover happy path + at least one error path. Required for new service/provider functions.
 
