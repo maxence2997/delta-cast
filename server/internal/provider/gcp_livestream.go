@@ -3,11 +3,13 @@ package provider
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	livestreamapi "cloud.google.com/go/video/livestream/apiv1"
 	livestreampb "cloud.google.com/go/video/livestream/apiv1/livestreampb"
 	"golang.org/x/oauth2/google"
+	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -320,6 +322,38 @@ func (p *gcpLiveStreamProvider) DeleteInput(ctx context.Context, inputID string)
 // GetPlaybackURL returns the HLS playback URL via Cloud CDN.
 func (p *gcpLiveStreamProvider) GetPlaybackURL(channelID string) string {
 	return fmt.Sprintf("https://%s/%s/main.m3u8", p.cdnDomain, channelID)
+}
+
+// ListChannels returns all channels in the configured region.
+// Used at startup for orphan recovery to clean up channels left active after a crash.
+func (p *gcpLiveStreamProvider) ListChannels(ctx context.Context) ([]ChannelInfo, error) {
+	client, err := p.getClient(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var channels []ChannelInfo
+	iter := client.ListChannels(ctx, &livestreampb.ListChannelsRequest{
+		Parent: p.locationPath(),
+	})
+	for {
+		ch, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("list channels: %w", err)
+		}
+		// Extract the short channel ID from the full resource name.
+		// Full name format: projects/{project}/locations/{location}/channels/{channelID}
+		parts := strings.Split(ch.Name, "/")
+		channelID := parts[len(parts)-1]
+		channels = append(channels, ChannelInfo{
+			ID:             channelID,
+			StreamingState: ch.StreamingState.String(),
+		})
+	}
+	return channels, nil
 }
 
 // WaitForChannelReady polls until the channel is in AWAITING_INPUT or STREAMING state.

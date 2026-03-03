@@ -43,6 +43,15 @@ type AgoraMediaPushNCSProvider interface {
 	VerifySignature(body []byte, signature string) bool
 }
 
+// ChannelInfo holds the identity and current state of a GCP Live Stream channel.
+type ChannelInfo struct {
+	// ID is the short channel identifier (e.g. "channel-3710b194"), not the full resource name.
+	ID string
+	// StreamingState is the current state as returned by the API
+	// (e.g. "AWAITING_INPUT", "STREAMING", "STOPPED", "STOPPING").
+	StreamingState string
+}
+
 // GCPLiveStreamProvider manages Google Cloud Live Stream API resources.
 type GCPLiveStreamProvider interface {
 	// CreateInput creates an RTMP input endpoint and returns (inputID, rtmpURI).
@@ -62,6 +71,9 @@ type GCPLiveStreamProvider interface {
 	GetPlaybackURL(channelID string) string
 	// WaitForChannelReady polls until the channel is in AWAITING_INPUT state.
 	WaitForChannelReady(ctx context.Context, channelID string) error
+	// ListChannels returns all channels in the configured region.
+	// Used at startup for orphan recovery.
+	ListChannels(ctx context.Context) ([]ChannelInfo, error)
 }
 
 // YouTubeProvider manages YouTube Data API v3 operations.

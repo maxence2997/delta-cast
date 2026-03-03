@@ -93,6 +93,10 @@ func (m *mockGCP) WaitForChannelReady(ctx context.Context, channelID string) err
 	return nil
 }
 
+func (m *mockGCP) ListChannels(ctx context.Context) ([]provider.ChannelInfo, error) {
+	return nil, nil
+}
+
 type mockYouTube struct {
 	createBroadcastCalled bool
 	createStreamCalled    bool
