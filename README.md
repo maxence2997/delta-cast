@@ -15,13 +15,13 @@
 
 ```mermaid
 flowchart LR
-    Streamer["推流端\n（Agora Web SDK）"]
+    Streamer["推流端 <br>（Agora Web SDK）"]
     Agora["Agora RTC Channel"]
     NCS["Agora NCS Webhook"]
     API["DeltaCast Server"]
     MP["Agora Media Push"]
     YT["YouTube Live\n（RTMP）"]
-    GCP["GCP Live Stream API + GCS + Cloud CDN"]
+    GCP["GCP Live Stream API <br> +  GCS + Cloud CDN"]
     YTPlayer["YouTube 播放器"]
     HLSPlayer["HLS 播放器"]
 
