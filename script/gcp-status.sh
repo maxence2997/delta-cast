@@ -184,6 +184,41 @@ else
   fail_ "livestream.googleapis.com NOT enabled"
 fi
 
+# 列出所有 channel 及其計費狀態
+TOKEN=$(gcloud auth print-access-token 2>/dev/null || true)
+if [ -n "${TOKEN}" ]; then
+  CHANNELS_JSON=$(curl -sf \
+    -H "Authorization: Bearer ${TOKEN}" \
+    "https://livestream.googleapis.com/v1/projects/${PROJECT_ID}/locations/${REGION}/channels" || echo '{}')
+  CHANNEL_LIST=$(echo "${CHANNELS_JSON}" | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+channels = data.get('channels', [])
+if not channels:
+    print('__EMPTY__')
+else:
+    for ch in channels:
+        name = ch['name'].split('/')[-1]
+        state = ch.get('streamingState', 'UNKNOWN')
+        print(f'{name} {state}')
+" 2>/dev/null || echo '__EMPTY__')
+
+  if [ "${CHANNEL_LIST}" = "__EMPTY__" ]; then
+    ok "No active Live Stream channels"
+  else
+    while IFS=' ' read -r ch_id ch_state; do
+      [ -z "${ch_id}" ] && continue
+      if [ "${ch_state}" = "STOPPED" ] || [ "${ch_state}" = "STOPPING" ]; then
+        ok "channel ${ch_id}  →  ${ch_state}"
+      else
+        warn_ "channel ${ch_id}  →  ${ch_state}  (計費中！run 'make gcp-livestream-cleanup')"
+      fi
+    done <<< "${CHANNEL_LIST}"
+  fi
+else
+  warn_ "無法取得 GCP access token，跳過 channel 狀態檢查"
+fi
+
 # ---------------------------------------------------------------------------
 section ".env.local"
 

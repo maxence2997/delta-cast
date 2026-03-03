@@ -2,7 +2,7 @@
 # DeltaCast — Developer Makefile
 # ========================================
 
-.PHONY: help build run test lint fmt tidy vet web-dev web-build web-lint docker-up docker-down docker-build clean clean-all gcp-open gcp-close gcp-status yt-status yt-open yt-close res-open res-close res-status
+.PHONY: help build run test lint fmt tidy vet web-dev web-build web-lint docker-up docker-down docker-build clean clean-all gcp-open gcp-close gcp-status gcp-livestream-cleanup yt-status yt-open yt-close res-open res-close res-status
 
 # Default target
 help: ## Show available commands
@@ -91,6 +91,10 @@ gcp-status: ## Check GCP resource status (ready for test?)
 	@chmod +x script/gcp-status.sh
 	@./script/gcp-status.sh
 
+gcp-livestream-cleanup: ## Stop and delete all active (billable) Live Stream channels and inputs
+	@chmod +x script/gcp-livestream-cleanup.sh
+	@./script/gcp-livestream-cleanup.sh
+
 gcp-open: ## Open CDN for testing: allow-all traffic + unlock GCS bucket
 	@chmod +x script/gcp-cdn-armor.sh script/gcp-storage-secure.sh
 	@echo "\n\033[36m── Step 1/2: CDN → allow all traffic (via Cloudflare) ──\033[0m"
@@ -134,9 +138,11 @@ res-open: ## Open all resources for testing: allow-all CDN + unlock GCS + unlock
 	@$(MAKE) yt-open
 	@echo "\n\033[32m✅  All resources open. Run 'make res-status' to verify.\033[0m\n"
 
-res-close: ## Close all resources after testing: deny CDN + lock GCS + lock YT
+res-close: ## Close all resources after testing: deny CDN + lock GCS + lock YT + cleanup Live Stream
 	@echo "\n\033[36m════ res-close: GCP ════\033[0m"
 	@$(MAKE) gcp-close
+	@echo "\n\033[36m════ res-close: Live Stream cleanup ════\033[0m"
+	@$(MAKE) gcp-livestream-cleanup
 	@echo "\n\033[36m════ res-close: YouTube ════\033[0m"
 	@$(MAKE) yt-close
 	@echo "\n\033[32m✅  All resources closed. Run 'make res-status' to verify.\033[0m\n"
