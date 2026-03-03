@@ -31,7 +31,7 @@ POST https://api.agora.io/{region}/v1/projects/{appId}/rtmp-converters
 ```json
 {
   "converter": {
-    "name": "deltacast-<sessionId>-gcp",
+    "name": "deltacast-<sessionId>_gcp",
     "rawOptions": {
       "rtcChannel": "<agoraChannel>",
       "rtcStreamUid": 0

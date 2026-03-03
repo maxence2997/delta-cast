@@ -24,7 +24,7 @@
   - Web:
     - GCP 來源:
       - 框架: Next.js 16 + Tailwind CSS(簡潔為主)
-      - 播放器: video.js (核心) + react-video-js-player (包裝後的 React 元件) + Cloud CDN HLS URL
+      - 播放器: video.js（直接使用，React `useRef<HTMLVideoElement>` 包裝）+ Cloud CDN HLS URL
     - YouTube 來源：react-player(優先) 或 YouTube IFrame Player API(次要)
   - Mobile(N2H):
     - iOS(Swift):
@@ -43,7 +43,7 @@
 ### 3.1 認證機制
 
 - **層 1 — 前端存取控制**：CF Zero Trust Access 擋於網路層，未認證者無法碰到前端站點。專用 Google / GitHub OAuth + email 白名單驗證。
-- **層 2 — API 認證**：所有後端 API 端點（Webhook 除外）需帶上 `Authorization: Bearer <JWT>` 標頭。JWT 使用 HS256 簽發，POC 階段以固定 secret 驗證，不做使用者系統。前端透過 `NEXT_PUBLIC_API_TOKEN` 環境變數載入長效静態 admin JWT。
+- **層 2 — API 認證**：所有後端 API 端點（Webhook 除外）需帶上 `Authorization: Bearer <JWT>` 標頭。JWT 使用 HS256 簽發，**必須包含 `"iss": "delta-cast"` claim**，POC 階段以固定 secret 驗證，不做使用者系統。前端透過 server-side 環境變數 `API_TOKEN` 載入長效靜態 admin JWT；後端提供 `/api/token` Next.js route 將 Token 安全傳遞給前端，Token 不暴露於瀏覽器 bundle。
 - **Agora Webhook**：透過 Agora 簽章驗證（Agora Notification Callback Service 簽章機制）。
 
 ### 3.2 Session 管理
@@ -202,13 +202,14 @@ sequenceDiagram
 
 `POST /v1/live/stop` 可在任意狀態下呼叫，包括仍在 `preparing` 的過程中。此時後端的處理機制如下：
 
-1. `Stop` 設定 session state 為 `stopping`，呼叫 `allocCancel()` 取消 allocation goroutine 的 context，隨即 reset session 為 `idle` 並**立即回傳** `{state: idle}` 給呼叫端。
-2. 進行中的 GCP/YouTube API 呼叫因 context 被取消而提前返回 error，`wg.Wait()` 解除阻塞。
-3. `allocateResources` goroutine 偵測到 `stateStopping == true`，進入 **partial resource cleanup** 分支（非同步，與 API response 並行）：
+1. `Stop` 設定 session state 為 `stopping`，呼叫 `allocCancel()` 取消 allocation goroutine 的 context，並快照此時所有資源 ID（preparing 階段尚未寫入，均為空字串）。
+2. `Stop` 同步執行 6 個清理步驟。由於所有資源 ID 均為空，每個步驟的 guard（`if channelID != ""`）全部跳過，**Stop() 幾乎瞬間完成**，session 重設為 `idle`，回傳 `{state: "idle"}`。
+3. 進行中的 GCP/YouTube API 呼叫因 context 被取消而提前返回 error，`allocateResources` goroutine 的 `wg.Wait()` 解除阻塞。
+4. `allocateResources` goroutine 偵測到 `stateStopping == true`（或 `sessionID` 已變更），進入 **partial resource cleanup** 分支（非同步，在 Stop() 回傳後繼續執行）：
    - 使用全新的 60s context（原始 ctx 已被取消）
    - 嘗試 `StopChannel` → `DeleteChannel` → `DeleteInput`（若資源不存在，GCP 回 404，log 後繼續）
    - 若 YouTube broadcast 已建立，呼叫 `TransitionBroadcast("complete")`
-4. 清理完成（goroutine 內，`Stop()` 回傳後非同步發生）。
+   - 以 `if s.session.ID == sessionID` guard 防止誤覆蓋後續新建的 session
 
 ```mermaid
 sequenceDiagram
@@ -221,11 +222,12 @@ sequenceDiagram
     API->>GCP: CreateInput（進行中）
 
     Streamer->>API: POST /v1/live/stop
-    Note over API: state → stopping，呼叫 allocCancel()，reset → idle
-    API-->>Streamer: { state: "idle" }（立即回傳）
+    Note over API: state → stopping，快照 ID（全為空），呼叫 allocCancel()
+    Note over API: 同步執行 6 步（ID 全空，guard 全部跳過），reset → idle
+    API-->>Streamer: { state: "idle" }
 
     Note over API: allocateResources ctx 被取消，API 呼叫提前返回
-    Note over API: 偵測到 stateStopping，進入 partial cleanup（非同步）
+    Note over API: 偵測到 stateStopping，進入 partial cleanup（非同步，60s ctx）
     API->>GCP: StopChannel（best-effort，404 可忽略）
     API->>GCP: DeleteChannel
     API->>GCP: DeleteInput

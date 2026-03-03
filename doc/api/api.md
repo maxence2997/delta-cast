@@ -13,6 +13,7 @@ Authorization: Bearer <JWT>
 ```
 
 JWT 使用 **HS256** 演算法簽發，secret 對應環境變數 `JWT_SECRET`。  
+JWT 必須包含 `"iss": "delta-cast"` claim，缺少此 claim 的 Token 將以 `401 Unauthorized` 拒絕，即使簽名正確。  
 Webhook 端點不需要 JWT，改用 **Agora HMAC/SHA1 簽章驗證**（`Agora-Signature` Header）。
 
 ---
@@ -127,7 +128,7 @@ Webhook 端點不需要 JWT，改用 **Agora HMAC/SHA1 簽章驗證**（`Agora-S
 }
 ```
 
-**Response `200 OK`** — 無活躍 Session：
+**Response `200 OK`** — 無活躍 Session（state 為 `idle`）：
 
 ```json
 {
@@ -136,6 +137,18 @@ Webhook 端點不需要 JWT，改用 **Agora HMAC/SHA1 簽章驗證**（`Agora-S
   "message": "no active session"
 }
 ```
+
+**Response `200 OK`** — Teardown 已在進行中（state 為 `stopping`）：
+
+```json
+{
+  "sessionId": "",
+  "state": "stopping",
+  "message": "no active session"
+}
+```
+
+> 呼叫端收到 `state: "stopping"` 時應繼續輪詢 `GET /v1/live/status`，直到 state 轉為 `idle`。
 
 **Response `500 Internal Server Error`**：
 
@@ -156,7 +169,8 @@ Webhook 端點不需要 JWT，改用 **Agora HMAC/SHA1 簽章驗證**（`Agora-S
 | 4    | 停止 GCP Channel                                |
 | 5    | 刪除 GCP Channel                                |
 | 6    | 刪除 GCP Input                                  |
-| 7    | Session 狀態重設為 `idle`                       |
+
+> 六步驟完成後 Session 狀態重設為 `idle`。各步驟皆有 guard 保護（資源 ID 為空則跳過），可安全用於任何非 idle/stopping 狀態。
 
 ---
 
@@ -214,10 +228,18 @@ Content-Type: application/json
   "productId": 1,
   "eventType": 103,
   "payload": {
-    "uid": 12345
+    "uid": 12345,
+    "channelName": "deltacast-a1b2c3d4",
+    "clientSeq": 1
   }
 }
 ```
+
+| Payload 欄位  | 說明                                                                                                |
+| ------------- | --------------------------------------------------------------------------------------------------- |
+| `uid`         | Agora RTC UID                                                                                       |
+| `channelName` | Agora 頻道名稱，用於驗證事件是否屬於當前 Session 的頻道                                             |
+| `clientSeq`   | 主播端序號；`> 0` 為真實主播事件；`== 0` 為 Media Push bot 的假離開事件（eventType 104 時忽略此類） |
 
 **Response `200 OK`**：
 
