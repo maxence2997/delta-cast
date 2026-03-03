@@ -33,6 +33,10 @@ func main() {
 		YouTubeRelayEnabled: cfg.YouTubeRelayEnabled,
 	})
 
+	// Run orphan recovery in background — cleans up GCP channels left active after a crash.
+	// Must not block server startup.
+	go liveSvc.RecoverOrphanedResources()
+
 	// Handlers
 	liveHandler := handler.NewLiveHandler(liveSvc, cfg.AgoraAppID)
 	webhookHandler := handler.NewWebhookHandler(liveSvc, agoraChannelNCSProvider, agoraMediaPushNCSProvider)

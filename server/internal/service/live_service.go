@@ -4,6 +4,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -254,6 +255,10 @@ func (s *LiveService) allocateResources(sessionID string) {
 		s.session.YouTubeWatchURL = s.youtube.GetWatchURL(broadcastID)
 	}
 	s.session.State = model.StateReady
+	// Start the ready-state watchdog. If Start is not called within the TTL,
+	// the GCP channel (AWAITING_INPUT, billable) is automatically torn down.
+	s.startWatchdog(sessionID, 5*time.Minute)
+	s.mu.Unlock()
 
 	logger.Infof("session %s resources ready (gcp=%v, youtube=%v)", sessionID, s.relay.GCPRelayEnabled, s.relay.YouTubeRelayEnabled)
 }
@@ -437,6 +442,7 @@ func (s *LiveService) HandleChannelWebhook(ctx context.Context, noticeID string,
 	channelName = s.session.AgoraChannel
 	gcpRTMPURL := s.session.GCPInputURI
 	ytRTMPURL := s.session.YouTubeRTMPURL
+	watchdogSessionID := s.session.ID // capture for live-state watchdog
 	s.mu.Unlock()
 
 	var (
@@ -516,6 +522,9 @@ func (s *LiveService) HandleChannelWebhook(ctx context.Context, noticeID string,
 	s.mu.Unlock()
 
 	logger.Infof("media push started: gcp_sid=%s, yt_sid=%s", gcpSID, ytSID)
+	// Start the live-state watchdog. If the stream runs beyond the TTL without a stop
+	// event (e.g. Agora NCS events not delivered), the session is automatically torn down.
+	s.startWatchdog(watchdogSessionID, 1*time.Hour)
 	return nil
 }
 
@@ -655,6 +664,76 @@ func (s *LiveService) Stop(ctx context.Context) (*model.StopResponse, error) {
 		State:     model.StateIdle,
 		Message:   "session stopped, all resources cleaned up",
 	}, nil
+}
+
+// startWatchdog schedules an automatic stop for the given session after ttl.
+// The goroutine guards on sessionID so that a newer session created after a stop
+// will not be incorrectly torn down. Safe to call while holding s.mu.
+func (s *LiveService) startWatchdog(sessionID string, ttl time.Duration) {
+	logger.Infof("[watchdog] scheduling auto-stop for session %s in %s", sessionID, ttl)
+	go func() {
+		time.Sleep(ttl)
+		s.mu.Lock()
+		if s.session.ID != sessionID {
+			s.mu.Unlock()
+			logger.Infof("[watchdog] session %s already replaced, skipping auto-stop", sessionID)
+			return
+		}
+		state := s.session.State
+		s.mu.Unlock()
+		logger.Warnf("[watchdog] session %s TTL exceeded (state=%s) — triggering auto-stop", sessionID, state)
+		if _, err := s.Stop(context.Background()); err != nil {
+			logger.Errorf("[watchdog] auto-stop failed for session %s: %v", sessionID, err)
+		}
+	}()
+}
+
+// RecoverOrphanedResources lists all GCP channels and stops + deletes any that are
+// not in STOPPED or STOPPING state. Call once at server startup to clean up channels
+// abandoned after a crash or unexpected restart. Errors are logged but never propagate.
+func (s *LiveService) RecoverOrphanedResources() {
+	if !s.relay.GCPRelayEnabled {
+		return
+	}
+	logger.Infof("[recovery] scanning for orphaned GCP channels")
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+
+	channels, err := s.gcp.ListChannels(ctx)
+	if err != nil {
+		logger.Errorf("[recovery] list channels failed: %v", err)
+		return
+	}
+	if len(channels) == 0 {
+		logger.Infof("[recovery] no channels found")
+		return
+	}
+
+	freed := 0
+	for _, ch := range channels {
+		if ch.StreamingState == "STOPPED" || ch.StreamingState == "STOPPING" {
+			logger.Infof("[recovery] channel %s is %s — skipping", ch.ID, ch.StreamingState)
+			continue
+		}
+		logger.Warnf("[recovery] found orphaned channel %s (state=%s) — cleaning up", ch.ID, ch.StreamingState)
+		if err := s.gcp.StopChannel(ctx, ch.ID); err != nil {
+			logger.Warnf("[recovery] stop orphaned channel %s: %v", ch.ID, err)
+		}
+		if err := s.gcp.DeleteChannel(ctx, ch.ID); err != nil {
+			logger.Errorf("[recovery] delete orphaned channel %s: %v", ch.ID, err)
+		}
+		// Input ID follows the naming convention: channel-{uuid8} → input-{uuid8}
+		inputID := "input-" + strings.TrimPrefix(ch.ID, "channel-")
+		if err := s.gcp.DeleteInput(ctx, inputID); err != nil {
+			logger.Errorf("[recovery] delete orphaned input %s: %v", inputID, err)
+		}
+		freed++
+	}
+	if freed > 0 {
+		logger.Warnf("[recovery] cleaned up %d orphaned channel(s)", freed)
+	} else {
+		logger.Infof("[recovery] no orphaned channels found")
+	}
 }
 
 // setupGCPResources creates a GCP input and channel, starts the channel, and waits
