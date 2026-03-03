@@ -107,7 +107,11 @@ export function start(): Promise<StartResponse> {
 }
 
 export function stop(): Promise<StopResponse> {
-  return request<StopResponse>("/v1/live/stop", { method: "POST" });
+  // keepalive ensures the request is delivered even when the browser tab is closing.
+  return request<StopResponse>("/v1/live/stop", {
+    method: "POST",
+    keepalive: true,
+  });
 }
 
 export function getStatus(): Promise<StatusResponse> {
