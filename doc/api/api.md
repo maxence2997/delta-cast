@@ -236,18 +236,20 @@ Content-Type: application/json
 
 **處理邏輯**：
 
-- 只處理 `eventType = 103`（主播加入頻道），其他 eventType 直接忽略並回傳 `200`
-- 收到 103 後觸發 Agora Media Push 轉發至 GCP RTMP + YouTube RTMP，並呼叫 YouTube Broadcast 轉為 `live`
-- **冪等保護**：若 Session 已為 `live`，忽略重複事件
+- **eventType 103**（主播加入頻道）：Session 為 `ready` 時，觸發 Agora Media Push 轉發至 GCP RTMP + YouTube RTMP，Session 狀態轉為 `live`；YouTube Broadcast 透過建立時設定的 `enableAutoStart=true` 自動 transition，無需顯式呼叫
+- **eventType 102**（頻道銀毀）：Session 為 `live` 時，觸發自動關播（同 Stop 流程）
+- **eventType 104**（主播離開頻道）：Session 為 `live` 且 `payload.clientSeq > 0` 時，觸發自動關播；`clientSeq == 0` 為 Media Push bot 報到的假離開事件，忽略
+- 其他 eventType 直接忽略並回傳 `200`
+- **冪等保護**：以 Session 狀態作為 guard，已處理過的事件不重覆執行
 
 **RTC Channel eventType 對照**：
 
-| eventType | 說明                                |
-| --------- | ----------------------------------- |
-| 101       | 頻道建立                            |
-| 102       | 頻道銷毀                            |
-| **103**   | **主播加入頻道（觸發 Media Push）** |
-| 104       | 主播離開頻道                        |
+| eventType | 說明                                           |
+| --------- | ---------------------------------------------- |
+| 101       | 頻道建立                                       |
+| **102**   | **頻道銀毀（Session live 時觸發自動關播）**    |
+| **103**   | **主播加入頻道（觸發 Media Push）**            |
+| **104**   | **主播離開頻道（clientSeq>0 時觸發自動關播）** |
 
 ---
 
