@@ -450,30 +450,43 @@ func (s *LiveService) HandleChannelWebhook(ctx context.Context, noticeID string,
 		ytSID     string
 		gcpFailed bool
 		ytFailed  bool
+		wg        sync.WaitGroup
+		pushMu    sync.Mutex
 	)
 
-	// Start Media Push to GCP. The converter name uses a "_gcp" suffix so that the
-	// GCP and YouTube converters for the same channel have unique names.
+	// Start Media Push to GCP and YouTube in parallel. The converter names use
+	// "_gcp" / "_yt" suffixes to ensure uniqueness within the project.
+	// EnableAutoStart=true on the YouTube broadcast lets YouTube auto-transition once
+	// it detects a healthy H.264 stream, so no explicit TransitionBroadcast is needed.
 	if s.relay.GCPRelayEnabled {
-		var err error
-		gcpSID, err = s.agoraMediaPush.StartMediaPush(ctx, channelName+"_gcp", channelName, uid, gcpRTMPURL)
-		if err != nil {
-			logger.Errorf("media push to GCP failed: %v", err)
-			gcpFailed = true
-		}
+		wg.Go(func() {
+			sid, err := s.agoraMediaPush.StartMediaPush(ctx, channelName+"_gcp", channelName, uid, gcpRTMPURL)
+			pushMu.Lock()
+			defer pushMu.Unlock()
+			if err != nil {
+				logger.Errorf("media push to GCP failed: %v", err)
+				gcpFailed = true
+			} else {
+				gcpSID = sid
+			}
+		})
 	}
 
-	// Start Media Push to YouTube.
-	// EnableAutoStart=true on the broadcast lets YouTube auto-transition once
-	// it detects a healthy H.264 stream, so no explicit TransitionBroadcast is needed.
 	if s.relay.YouTubeRelayEnabled {
-		var err error
-		ytSID, err = s.agoraMediaPush.StartMediaPush(ctx, channelName+"_yt", channelName, uid, ytRTMPURL)
-		if err != nil {
-			logger.Errorf("media push to YouTube failed: %v", err)
-			ytFailed = true
-		}
+		wg.Go(func() {
+			sid, err := s.agoraMediaPush.StartMediaPush(ctx, channelName+"_yt", channelName, uid, ytRTMPURL)
+			pushMu.Lock()
+			defer pushMu.Unlock()
+			if err != nil {
+				logger.Errorf("media push to YouTube failed: %v", err)
+				ytFailed = true
+			} else {
+				ytSID = sid
+			}
+		})
 	}
+
+	wg.Wait()
 
 	s.mu.Lock()
 	// If any enabled relay target failed to start, roll back to ready so the next
