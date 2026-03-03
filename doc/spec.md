@@ -61,18 +61,20 @@ stateDiagram-v2
     preparing --> idle : allocateResources 失敗（GCP 或 YT 錯誤）
     preparing --> stopping : Stop() 呼叫（allocCancel 取消 ctx）
     ready --> live : Agora NCS event 103
+    ready --> stopping : TTL watchdog（5 分鐘無 start）
     live --> stopping : POST /v1/live/stop（手動）
     live --> stopping : Agora NCS event 102 / 104（自動）
+    live --> stopping : TTL watchdog（1 小時）
     stopping --> idle : 完整 teardown 完成
 ```
 
-| 狀態        | 說明                                                          |
-| ----------- | ------------------------------------------------------------- |
-| `idle`      | 無活躍 Session                                                |
-| `preparing` | GCP 與 YouTube 資源建立中（背景非同步，約 30-60s）            |
-| `ready`     | 資源就緒，播放 URL 已填入，等待推流                           |
-| `live`      | 串流進行中，有實際內容                                        |
-| `stopping`  | 資源清理中；手動觸發或收到 Agora NCS event 102 / 104 自動觸發 |
+| 狀態        | 說明                                                                            |
+| ----------- | ------------------------------------------------------------------------------- |
+| `idle`      | 無活躍 Session                                                                  |
+| `preparing` | GCP 與 YouTube 資源建立中（背景非同步，約 30-60s）                              |
+| `ready`     | 資源就緒，播放 URL 已填入，等待推流；**5 分鐘**內未 start 則 watchdog 自動 stop |
+| `live`      | 串流進行中，有實際內容；**1 小時**後 watchdog 自動 stop                         |
+| `stopping`  | 資源清理中；手動觸發、Agora NCS event 102/104 自動觸發、或 watchdog TTL 觸發    |
 
 ### 3.3 GCP 資源生命週期
 
@@ -294,6 +296,8 @@ Agora Media Push 以 **raw relay** 模式運作，不對串流重新編碼，直
 ## 5. 注意事項
 
 - **成本控管**: Google Live Stream API 是按時段計費，Stop 流程每一步驟失敗需 log 但不中斷後續清理，確保資源完整釋放。
+- **Watchdog TTL**: `ready` 狀態 5 分鐘無 `start` 呼叫、`live` 狀態超過 1 小時，後端自動執行 Stop，防止 GCP channel 閒置計費。TTL 以 sessionID 作 guard，不影響後續新 session。
+- **Server 啟動 Orphan Recovery**: 啟動時非同步掃描 GCP 所有 channel，對非 `STOPPED`/`STOPPING` 狀態的 channel 執行 stop + delete，清除 crash 後殘留的孤立資源。
 - **Session 單一性**: POC 階段僅支援單一活躍 Session，重複呼叫 Start 回傳現有 Session，不重複建立資源。
 - **狀態簡單化**: POC 階段不處理斷線重連或複雜的併發狀態，僅以「成功連通」為驗證指標。
 - **延遲預期**: HLS 預期延遲約 10-30 秒，YouTube RTMP 預期延遲約 5-10 秒。
