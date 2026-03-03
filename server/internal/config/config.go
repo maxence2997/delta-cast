@@ -48,14 +48,22 @@ type Config struct {
 	GCPRegion     string
 	GCPBucketName string
 	GCPCDNDomain  string
-	// GCPSAKeyPath is the file path to a GCP Service Account key JSON file.
+	// GCPSAKeyPath is the file path to a GCP credential JSON file (GCP_SA_KEY_PATH).
 	// Equivalent to GOOGLE_APPLICATION_CREDENTIALS but uses a GCP_* prefix for consistency.
+	// Accepts any format supported by ADC: SA key, Workload Identity Federation
+	// external_account config, or authorized_user config.
 	// Prefer this over GCPSAKeyJSON when file mounting is available.
 	GCPSAKeyPath string
-	// GCPSAKeyJSON is the full JSON content of a GCP Service Account key.
-	// Used in environments that cannot mount files (e.g. Railway).
-	// Takes priority over GCPSAKeyPath / ADC.
+	// GCPSAKeyJSON is the full inline content of a GCP credential JSON file (GCP_SA_KEY_JSON).
+	// Fallback after GCPSAKeyPath; used in environments that cannot mount files (e.g. Railway).
+	// Accepts the same credential formats as GCPSAKeyPath.
 	GCPSAKeyJSON string
+	// GCPSAImpersonateEmail is the email of the service account to impersonate (GCP_SA_IMPERSONATE_EMAIL).
+	// When set, the base credential (GCPSAKeyPath / GCPSAKeyJSON / ADC) is used as the source
+	// identity to obtain short-lived tokens for the target SA via IAM generateAccessToken.
+	// The source identity must hold roles/iam.serviceAccountTokenCreator on the target SA.
+	// Leave empty to skip impersonation.
+	GCPSAImpersonateEmail string
 
 	// YouTube
 	YouTubeClientID     string
@@ -102,6 +110,7 @@ func Load() (*Config, error) {
 		GCPCDNDomain:            os.Getenv("GCP_CDN_DOMAIN"),
 		GCPSAKeyPath:            os.Getenv("GCP_SA_KEY_PATH"),
 		GCPSAKeyJSON:            os.Getenv("GCP_SA_KEY_JSON"),
+		GCPSAImpersonateEmail:   os.Getenv("GCP_SA_IMPERSONATE_EMAIL"),
 		GCPRelayEnabled:         getEnvBool("GCP_RELAY_ENABLED", true),
 		YouTubeClientID:         os.Getenv("YOUTUBE_CLIENT_ID"),
 		YouTubeClientSecret:     os.Getenv("YOUTUBE_CLIENT_SECRET"),

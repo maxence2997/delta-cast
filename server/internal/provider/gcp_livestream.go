@@ -2,40 +2,58 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"log/slog"
+	"os"
 	"strings"
 	"time"
 
 	livestreamapi "cloud.google.com/go/video/livestream/apiv1"
 	livestreampb "cloud.google.com/go/video/livestream/apiv1/livestreampb"
 	"golang.org/x/oauth2/google"
+	"google.golang.org/api/impersonate"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type gcpLiveStreamProvider struct {
-	projectID  string
-	region     string
-	bucketName string
-	cdnDomain  string
-	saKeyPath  string
-	saKeyJSON  string
-	client     *livestreamapi.Client
+	projectID          string
+	region             string
+	bucketName         string
+	cdnDomain          string
+	saKeyPath          string
+	saKeyJSON          string
+	saImpersonateEmail string
+	client             *livestreamapi.Client
 }
 
 // NewGCPLiveStreamProvider creates a new GCPLiveStreamProvider.
-// saKeyPath is the file path to a GCP Service Account key JSON file (GCP_SA_KEY_PATH).
-// saKeyJSON is the full JSON content of a GCP Service Account key (GCP_SA_KEY_JSON); used as fallback.
-// Leave both empty to use Application Default Credentials (ADC).
-func NewGCPLiveStreamProvider(projectID, region, bucketName, cdnDomain, saKeyPath, saKeyJSON string) GCPLiveStreamProvider {
+//
+// saKeyPath is a file path to a GCP credential JSON file (GCP_SA_KEY_PATH).
+// It accepts any credential format supported by ADC: SA key, Workload Identity Federation
+// external_account config, or authorized_user config.
+//
+// saKeyJSON is the full JSON content of a GCP credential file (GCP_SA_KEY_JSON).
+// Used as fallback in PaaS environments where file mounting is not available (e.g. Railway).
+// Accepts the same credential formats as saKeyPath.
+//
+// saImpersonateEmail is the email of the service account to impersonate (GCP_SA_IMPERSONATE_EMAIL).
+// When set, the base credential (saKeyPath / saKeyJSON / ADC) is used as the source identity
+// to obtain short-lived tokens for the target SA via the IAM generateAccessToken API.
+// The source identity must have roles/iam.serviceAccountTokenCreator on the target SA.
+//
+// Leave saKeyPath, saKeyJSON, and saImpersonateEmail all empty to use ADC directly.
+func NewGCPLiveStreamProvider(projectID, region, bucketName, cdnDomain, saKeyPath, saKeyJSON, saImpersonateEmail string) GCPLiveStreamProvider {
 	return &gcpLiveStreamProvider{
-		projectID:  projectID,
-		region:     region,
-		bucketName: bucketName,
-		cdnDomain:  cdnDomain,
-		saKeyPath:  saKeyPath,
-		saKeyJSON:  saKeyJSON,
+		projectID:          projectID,
+		region:             region,
+		bucketName:         bucketName,
+		cdnDomain:          cdnDomain,
+		saKeyPath:          saKeyPath,
+		saKeyJSON:          saKeyJSON,
+		saImpersonateEmail: saImpersonateEmail,
 	}
 }
 
@@ -43,26 +61,104 @@ func (p *gcpLiveStreamProvider) getClient(ctx context.Context) (*livestreamapi.C
 	if p.client != nil {
 		return p.client, nil
 	}
-	// Priority:
-	// 1. GCP_SA_KEY_PATH — file path to SA key, passed via option.WithCredentialsFile.
-	// 2. GCP_SA_KEY_JSON — full JSON content, for PaaS environments that cannot mount files (e.g. Railway).
-	// 3. ADC — SDK picks up ambient credentials automatically when neither above is set.
-	var opts []option.ClientOption
+
+	const scope = "https://www.googleapis.com/auth/cloud-platform"
+
+	// Phase 1: resolve base credentials.
+	// Priority (high → low):
+	// 1. GCP_SA_KEY_PATH — file path to a credential JSON file. Accepts SA key, WIF
+	//    external_account config, or authorized_user config.
+	// 2. GCP_SA_KEY_JSON — inline credential JSON; for PaaS that cannot mount files.
+	//    Accepts the same formats as GCP_SA_KEY_PATH.
+	// 3. ADC — SDK discovers credentials automatically via GOOGLE_APPLICATION_CREDENTIALS,
+	//    metadata server, or gcloud. Covers Cloud Run, GKE Workload Identity, and local dev.
+	var baseCreds *google.Credentials
+	authMode := "ADC"
 	if p.saKeyPath != "" {
-		opts = append(opts, option.WithCredentialsFile(p.saKeyPath))
-	} else if p.saKeyJSON != "" {
-		jwtCfg, err := google.JWTConfigFromJSON([]byte(p.saKeyJSON), "https://www.googleapis.com/auth/cloud-platform")
+		jsonData, err := os.ReadFile(p.saKeyPath)
 		if err != nil {
-			return nil, fmt.Errorf("parse gcp service account key: %w", err)
+			return nil, fmt.Errorf("read gcp credential file: %w", err)
 		}
-		opts = append(opts, option.WithTokenSource(jwtCfg.TokenSource(ctx)))
+		baseCreds, err = credentialsFromJSON(ctx, jsonData, scope)
+		if err != nil {
+			return nil, fmt.Errorf("parse gcp credential file: %w", err)
+		}
+		authMode = "credential file"
+	} else if p.saKeyJSON != "" {
+		var err error
+		baseCreds, err = credentialsFromJSON(ctx, []byte(p.saKeyJSON), scope)
+		if err != nil {
+			return nil, fmt.Errorf("parse gcp inline credential JSON: %w", err)
+		}
+		authMode = "inline credential JSON"
 	}
-	client, err := livestreamapi.NewClient(ctx, opts...)
+
+	// Phase 2: optionally wrap with SA impersonation.
+	// When GCP_SA_IMPERSONATE_EMAIL is set, the base credentials (or ADC) are used as the
+	// source identity to obtain short-lived tokens for the target SA via IAM generateAccessToken.
+	// The source identity must hold roles/iam.serviceAccountTokenCreator on the target SA.
+	var finalOpts []option.ClientOption
+	if p.saImpersonateEmail != "" {
+		var baseOpts []option.ClientOption
+		if baseCreds != nil {
+			baseOpts = append(baseOpts, option.WithTokenSource(baseCreds.TokenSource))
+		}
+		ts, err := impersonate.CredentialsTokenSource(ctx, impersonate.CredentialsConfig{
+			TargetPrincipal: p.saImpersonateEmail,
+			Scopes:          []string{scope},
+		}, baseOpts...)
+		if err != nil {
+			return nil, fmt.Errorf("create impersonation token source for %s: %w", p.saImpersonateEmail, err)
+		}
+		finalOpts = append(finalOpts, option.WithTokenSource(ts))
+		authMode += " + impersonation " + p.saImpersonateEmail
+	} else if baseCreds != nil {
+		finalOpts = append(finalOpts, option.WithCredentials(baseCreds))
+	}
+	// ADC without impersonation: no opts passed — SDK discovers credentials automatically.
+
+	slog.InfoContext(ctx, "gcp auth initialized", "mode", authMode)
+
+	client, err := livestreamapi.NewClient(ctx, finalOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("create livestream client: %w", err)
 	}
 	p.client = client
 	return client, nil
+}
+
+// credentialsFromJSON parses a GCP credential JSON and returns Credentials using
+// the type-safe google.CredentialsFromJSONWithTypeAndParams.
+// It first detects the "type" field in the JSON and validates it against the known
+// credential types accepted by this application before loading, preventing
+// unintentional loading of an unexpected credential format.
+func credentialsFromJSON(ctx context.Context, jsonData []byte, scope string) (*google.Credentials, error) {
+	var header struct {
+		Type string `json:"type"`
+	}
+	if err := json.Unmarshal(jsonData, &header); err != nil {
+		return nil, fmt.Errorf("detect credential type: %w", err)
+	}
+
+	var credType google.CredentialsType
+	switch header.Type {
+	case string(google.ServiceAccount):
+		credType = google.ServiceAccount
+	case string(google.AuthorizedUser):
+		credType = google.AuthorizedUser
+	case string(google.ExternalAccount):
+		credType = google.ExternalAccount
+	case string(google.ExternalAccountAuthorizedUser):
+		credType = google.ExternalAccountAuthorizedUser
+	case string(google.ImpersonatedServiceAccount):
+		credType = google.ImpersonatedServiceAccount
+	default:
+		return nil, fmt.Errorf("unsupported gcp credential type %q", header.Type)
+	}
+
+	return google.CredentialsFromJSONWithTypeAndParams(ctx, jsonData, credType, google.CredentialsParams{
+		Scopes: []string{scope},
+	})
 }
 
 func (p *gcpLiveStreamProvider) locationPath() string {

@@ -122,6 +122,92 @@ export GCP_SA_KEY_PATH=~/deltacast-sa-key.json
 
 ---
 
+## 3.6 部署環境認證設定
+
+### Cloud Run（推薦）
+
+直接在服務設定中指定 Service Account，ADC 透過 metadata server 自動取得 token，**不需任何 SA key env var**：
+
+```bash
+gcloud run deploy deltacast \
+  --service-account=deltacast-server@YOUR_PROJECT_ID.iam.gserviceaccount.com \
+  # ... 其他旗標
+```
+
+確認 SA 已有必要 IAM 角色（3.5 節已設定）。環境變數 `GCP_SA_KEY_PATH`、`GCP_SA_KEY_JSON` 均不需設定，程式會 fallback 至 ADC。
+
+### 自建 Kubernetes
+
+**方案 A：SA key 掛入 Secret**
+
+```bash
+# 建立 Secret
+kubectl create secret generic deltacast-gcp-creds \
+  --from-file=credential.json=~/deltacast-sa-key.json
+
+# Deployment 掛載並設定 env
+env:
+  - name: GCP_SA_KEY_PATH
+    value: /var/secrets/gcp/credential.json
+volumeMounts:
+  - name: gcp-creds
+    mountPath: /var/secrets/gcp
+    readOnly: true
+volumes:
+  - name: gcp-creds
+    secret:
+      secretName: deltacast-gcp-creds
+```
+
+**方案 B：Workload Identity Federation + OIDC token projection**（不需 SA key 檔）
+
+```bash
+# 建立 WIF provider（與 K8s OIDC issuer 綁定）
+gcloud iam workload-identity-pools create deltacast-k8s-pool --location=global
+gcloud iam workload-identity-pools providers create-oidc deltacast-k8s-provider \
+  --workload-identity-pool=deltacast-k8s-pool \
+  --issuer-uri=https://YOUR_K8S_OIDC_ISSUER \
+  --attribute-mapping="google.subject=assertion.sub" \
+  --location=global
+
+# 綁定 WIF 身份至 SA
+gcloud iam service-accounts add-iam-policy-binding \
+  deltacast-server@YOUR_PROJECT_ID.iam.gserviceaccount.com \
+  --member="principal://iam.googleapis.com/projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/deltacast-k8s-pool/subject/YOUR_K8S_SA" \
+  --role="roles/iam.workloadIdentityUser"
+```
+
+將 external_account credential config 檔以 ConfigMap 掛入 Pod，並設定 `GCP_SA_KEY_PATH` 指向該檔案，SDK 會自動辨識 `external_account` 格式。
+
+---
+
+## 3.7 SA Impersonation（選用）
+
+適用場景：CI/CD pipeline 使用低權限的部署 SA（source），需要 impersonate 實際執行的 SA（target）以取得必要權限。
+
+```bash
+# 授予 source SA impersonate 權限
+gcloud iam service-accounts add-iam-policy-binding \
+  TARGET_SA@YOUR_PROJECT_ID.iam.gserviceaccount.com \
+  --member="serviceAccount:SOURCE_SA@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
+  --role="roles/iam.serviceAccountTokenCreator"
+```
+
+設定環境變數：
+
+```bash
+# base credential 指向 source SA
+GCP_SA_KEY_PATH=/path/to/source-sa-key.json
+# 或 Cloud Run 直接綁 source SA，不設 GCP_SA_KEY_PATH
+
+# 目標 SA email
+GCP_SA_IMPERSONATE_EMAIL=deltacast-server@YOUR_PROJECT_ID.iam.gserviceaccount.com
+```
+
+程式啟動後 log 會顯示 `gcp auth initialized mode="credential file + impersonation <target-email>"` 確認生效。
+
+---
+
 ## 環境變數對應
 
 | 環境變數          | 值                        | 備註                         |
