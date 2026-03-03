@@ -22,13 +22,14 @@ func main() {
 	// Providers
 	agoraTokenProvider := provider.NewAgoraTokenProvider(cfg.AgoraAppID, cfg.AgoraAppCertificate)
 	agoraMediaPushProvider := provider.NewAgoraMediaPushProvider(cfg.AgoraAppID, cfg.AgoraRegion, cfg.AgoraRESTKey, cfg.AgoraRESTSecret, cfg.AgoraTranscodingEnabled)
+	agoraChannelProvider := provider.NewAgoraChannelProvider(cfg.AgoraAppID, cfg.AgoraRESTKey, cfg.AgoraRESTSecret)
 	agoraChannelNCSProvider := provider.NewAgoraChannelNCSProvider(cfg.AgoraChannelNCSSecret)
 	agoraMediaPushNCSProvider := provider.NewAgoraMediaPushNCSProvider(cfg.AgoraMediaPushNCSSecret)
 	gcpProvider := provider.NewGCPLiveStreamProvider(cfg.GCPProjectID, cfg.GCPRegion, cfg.GCPBucketName, cfg.GCPCDNDomain, cfg.GCPSAKeyPath, cfg.GCPSAKeyJSON)
 	youtubeProvider := provider.NewYouTubeProvider(cfg.YouTubeClientID, cfg.YouTubeClientSecret, cfg.YouTubeRefreshToken)
 
 	// Service
-	liveSvc := service.NewLiveService(agoraTokenProvider, agoraMediaPushProvider, gcpProvider, youtubeProvider, service.RelayOptions{
+	liveSvc := service.NewLiveService(agoraTokenProvider, agoraMediaPushProvider, agoraChannelProvider, gcpProvider, youtubeProvider, service.RelayOptions{
 		GCPRelayEnabled:     cfg.GCPRelayEnabled,
 		YouTubeRelayEnabled: cfg.YouTubeRelayEnabled,
 	})

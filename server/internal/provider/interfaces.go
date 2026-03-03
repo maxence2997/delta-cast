@@ -29,6 +29,15 @@ type AgoraMediaPushProvider interface {
 	ListConvertersByChannel(ctx context.Context, channelName string) ([]ConverterInfo, error)
 }
 
+// AgoraChannelProvider queries Agora channel state via the Channel Management REST API.
+type AgoraChannelProvider interface {
+	// QueryBroadcasters returns the UIDs of all hosts (broadcasters) currently in the
+	// given Agora channel and whether the channel exists at all.
+	// Uses GET /dev/v1/channel/user/{appid}/{channelName}?hosts_only=1.
+	// Returns (nil, false, nil) when the channel does not exist.
+	QueryBroadcasters(ctx context.Context, channelName string) (broadcasters []uint32, channelExists bool, err error)
+}
+
 // AgoraChannelNCSProvider verifies webhook signatures for RTC Channel Event Callbacks.
 // Corresponds to the secret under Console → Notifications → RTC Channel Event Callbacks.
 type AgoraChannelNCSProvider interface {

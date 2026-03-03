@@ -20,7 +20,7 @@ func (m *mockAgoraToken) GenerateRTCToken(channelName string, uid uint32, ttl ui
 }
 
 type mockAgoraMediaPush struct {
-	startCount int
+	startCount atomic.Int32
 	stopCount  atomic.Int32
 	listCount  atomic.Int32
 	startErr   error
@@ -29,7 +29,7 @@ type mockAgoraMediaPush struct {
 }
 
 func (m *mockAgoraMediaPush) StartMediaPush(ctx context.Context, name string, channelName string, uid uint32, rtmpURL string) (string, error) {
-	m.startCount++
+	m.startCount.Add(1)
 	if m.startErr != nil {
 		return "", m.startErr
 	}
@@ -44,6 +44,12 @@ func (m *mockAgoraMediaPush) StopMediaPush(ctx context.Context, converterID stri
 func (m *mockAgoraMediaPush) ListConvertersByChannel(ctx context.Context, channelName string) ([]provider.ConverterInfo, error) {
 	m.listCount.Add(1)
 	return m.listResult, m.listErr
+}
+
+type mockAgoraChannel struct{}
+
+func (m *mockAgoraChannel) QueryBroadcasters(_ context.Context, _ string) ([]uint32, bool, error) {
+	return []uint32{1001}, true, nil
 }
 
 type mockGCP struct {
@@ -133,10 +139,11 @@ func (m *mockYouTube) GetWatchURL(broadcastID string) string {
 func newTestService() (*LiveService, *mockAgoraMediaPush, *mockGCP, *mockYouTube) {
 	tokenProv := &mockAgoraToken{}
 	pushProv := &mockAgoraMediaPush{}
+	channelProv := &mockAgoraChannel{}
 	gcpProv := &mockGCP{}
 	ytProv := &mockYouTube{}
 
-	svc := NewLiveService(tokenProv, pushProv, gcpProv, ytProv, RelayOptions{GCPRelayEnabled: true, YouTubeRelayEnabled: true})
+	svc := NewLiveService(tokenProv, pushProv, channelProv, gcpProv, ytProv, RelayOptions{GCPRelayEnabled: true, YouTubeRelayEnabled: true})
 	return svc, pushProv, gcpProv, ytProv
 }
 
@@ -219,8 +226,8 @@ func TestHandleChannelWebhook_BroadcasterJoin_MovesToLive(t *testing.T) {
 	if svc.session.State != model.StateLive {
 		t.Errorf("expected state live, got %s", svc.session.State)
 	}
-	if pushProv.startCount != 2 {
-		t.Errorf("expected 2 media push starts, got %d", pushProv.startCount)
+	if pushProv.startCount.Load() != 2 {
+		t.Errorf("expected 2 media push starts, got %d", pushProv.startCount.Load())
 	}
 }
 
@@ -236,8 +243,8 @@ func TestHandleChannelWebhook_Idempotent(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if pushProv.startCount != 0 {
-		t.Errorf("expected 0 media push starts for duplicate webhook, got %d", pushProv.startCount)
+	if pushProv.startCount.Load() != 0 {
+		t.Errorf("expected 0 media push starts for duplicate webhook, got %d", pushProv.startCount.Load())
 	}
 }
 
@@ -257,8 +264,8 @@ func TestHandleChannelWebhook_DuplicateClientSeq(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if pushProv.startCount != 0 {
-		t.Errorf("expected 0 media push starts for replayed clientSeq, got %d", pushProv.startCount)
+	if pushProv.startCount.Load() != 0 {
+		t.Errorf("expected 0 media push starts for replayed clientSeq, got %d", pushProv.startCount.Load())
 	}
 }
 
@@ -277,8 +284,8 @@ func TestHandleChannelWebhook_WrongChannel(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if pushProv.startCount != 0 {
-		t.Errorf("expected 0 media push starts for wrong channel, got %d", pushProv.startCount)
+	if pushProv.startCount.Load() != 0 {
+		t.Errorf("expected 0 media push starts for wrong channel, got %d", pushProv.startCount.Load())
 	}
 }
 
@@ -292,8 +299,8 @@ func TestHandleWebhook_IgnoresOtherEvents(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if pushProv.startCount != 0 {
-		t.Errorf("expected 0 media push starts for event 102, got %d", pushProv.startCount)
+	if pushProv.startCount.Load() != 0 {
+		t.Errorf("expected 0 media push starts for event 102, got %d", pushProv.startCount.Load())
 	}
 }
 
@@ -403,16 +410,16 @@ func TestHandleChannelWebhook_DuplicateNoticeID(t *testing.T) {
 	if err := svc.HandleChannelWebhook(context.Background(), "notice-abc", 103, 12345, "ch", 1000); err != nil {
 		t.Fatalf("first delivery: unexpected error: %v", err)
 	}
-	if pushProv.startCount != 2 {
-		t.Fatalf("expected 2 starts after first delivery, got %d", pushProv.startCount)
+	if pushProv.startCount.Load() != 2 {
+		t.Fatalf("expected 2 starts after first delivery, got %d", pushProv.startCount.Load())
 	}
 
 	// Second delivery with same noticeId — must be ignored entirely.
 	if err := svc.HandleChannelWebhook(context.Background(), "notice-abc", 103, 12345, "ch", 1000); err != nil {
 		t.Fatalf("second delivery: unexpected error: %v", err)
 	}
-	if pushProv.startCount != 2 {
-		t.Errorf("expected no additional starts for duplicate noticeId, got %d total", pushProv.startCount)
+	if pushProv.startCount.Load() != 2 {
+		t.Errorf("expected no additional starts for duplicate noticeId, got %d total", pushProv.startCount.Load())
 	}
 }
 
@@ -453,8 +460,8 @@ func TestHandleChannelWebhook_Event103DuringPreparing_ProcessedAfterReady(t *tes
 	if err := svc.HandleChannelWebhook(context.Background(), "notice-early-103", 103, 999, "ch", 1000); err != nil {
 		t.Fatalf("preparing delivery: unexpected error: %v", err)
 	}
-	if pushProv.startCount != 0 {
-		t.Fatalf("expected 0 push starts during preparing, got %d", pushProv.startCount)
+	if pushProv.startCount.Load() != 0 {
+		t.Fatalf("expected 0 push starts during preparing, got %d", pushProv.startCount.Load())
 	}
 	svc.mu.Lock()
 	_, tombstoned := svc.session.SeenNoticeIDs["notice-early-103"]
@@ -471,8 +478,8 @@ func TestHandleChannelWebhook_Event103DuringPreparing_ProcessedAfterReady(t *tes
 	if svc.session.State != model.StateLive {
 		t.Errorf("expected state live after retry, got %s", svc.session.State)
 	}
-	if pushProv.startCount != 2 {
-		t.Errorf("expected 2 push starts after retry, got %d", pushProv.startCount)
+	if pushProv.startCount.Load() != 2 {
+		t.Errorf("expected 2 push starts after retry, got %d", pushProv.startCount.Load())
 	}
 }
 
@@ -509,14 +516,14 @@ func TestHandleChannelWebhook_Rollback_StopsSuccessfulConverter(t *testing.T) {
 
 // mockAgoraMediaPushFailSecond succeeds on the first StartMediaPush call and fails on the second.
 type mockAgoraMediaPushFailSecond struct {
-	callCount int
+	callCount atomic.Int32
 	stopCount atomic.Int32
-	listCount int
+	listCount atomic.Int32
 }
 
 func (m *mockAgoraMediaPushFailSecond) StartMediaPush(_ context.Context, name, _ string, _ uint32, _ string) (string, error) {
-	m.callCount++
-	if m.callCount == 1 {
+	count := m.callCount.Add(1)
+	if count == 1 {
 		return "gcp-converter-sid", nil
 	}
 	return "", errors.New("push failed")
@@ -528,7 +535,7 @@ func (m *mockAgoraMediaPushFailSecond) StopMediaPush(_ context.Context, _ string
 }
 
 func (m *mockAgoraMediaPushFailSecond) ListConvertersByChannel(_ context.Context, _ string) ([]provider.ConverterInfo, error) {
-	m.listCount++
+	m.listCount.Add(1)
 	return nil, nil
 }
 

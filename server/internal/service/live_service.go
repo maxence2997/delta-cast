@@ -38,6 +38,7 @@ type LiveService struct {
 
 	agoraToken     provider.AgoraTokenProvider
 	agoraMediaPush provider.AgoraMediaPushProvider
+	agoraChannel   provider.AgoraChannelProvider
 	gcp            provider.GCPLiveStreamProvider
 	youtube        provider.YouTubeProvider
 }
@@ -56,6 +57,7 @@ func newIdleSession() *model.Session {
 func NewLiveService(
 	agoraToken provider.AgoraTokenProvider,
 	agoraMediaPush provider.AgoraMediaPushProvider,
+	agoraChannel provider.AgoraChannelProvider,
 	gcp provider.GCPLiveStreamProvider,
 	youtube provider.YouTubeProvider,
 	opts RelayOptions,
@@ -65,6 +67,7 @@ func NewLiveService(
 		relay:          opts,
 		agoraToken:     agoraToken,
 		agoraMediaPush: agoraMediaPush,
+		agoraChannel:   agoraChannel,
 		gcp:            gcp,
 		youtube:        youtube,
 	}
@@ -535,9 +538,11 @@ func (s *LiveService) HandleChannelWebhook(ctx context.Context, noticeID string,
 	s.mu.Unlock()
 
 	logger.Infof("media push started: gcp_sid=%s, yt_sid=%s", gcpSID, ytSID)
-	// Start the live-state watchdog. If the stream runs beyond the TTL without a stop
-	// event (e.g. Agora NCS events not delivered), the session is automatically torn down.
-	s.startWatchdog(watchdogSessionID, 1*time.Hour)
+	// Start the live-state health check. Polls Agora every 5 minutes to verify that
+	// both a converter and at least one broadcaster are present. Three consecutive
+	// unhealthy ticks (15 min) trigger an auto-stop. A 4-hour hard TTL acts as the
+	// final failsafe regardless of health check results.
+	s.startLiveHealthCheck(watchdogSessionID)
 	return nil
 }
 
@@ -677,6 +682,88 @@ func (s *LiveService) Stop(ctx context.Context) (*model.StopResponse, error) {
 		State:     model.StateIdle,
 		Message:   "session stopped, all resources cleaned up",
 	}, nil
+}
+
+const liveCheckInterval = 5 * time.Minute
+const liveCheckMaxMisses = 3
+const liveCheckHardTTL = 4 * time.Hour
+
+// startLiveHealthCheck polls Agora every liveCheckInterval to verify that the
+// live session is still healthy. A session is considered healthy when ALL of the
+// following are true:
+//  1. At least one Agora Media Push converter is active for the channel.
+//  2. The Agora RTC channel exists.
+//  3. At least one broadcaster (host) is present in the channel.
+//
+// If any condition is false the miss counter increments. After liveCheckMaxMisses
+// consecutive unhealthy ticks an auto-stop is triggered. API errors are skipped
+// (not counted as a miss) to avoid false positives from transient network issues.
+// A hard TTL of liveCheckHardTTL serves as the final failsafe.
+func (s *LiveService) startLiveHealthCheck(sessionID string) {
+	logger.Infof("[healthcheck] starting live health check for session %s (interval=%s maxMisses=%d hardTTL=%s)",
+		sessionID, liveCheckInterval, liveCheckMaxMisses, liveCheckHardTTL)
+	go func() {
+		ticker := time.NewTicker(liveCheckInterval)
+		defer ticker.Stop()
+		deadline := time.After(liveCheckHardTTL)
+		misses := 0
+		for {
+			select {
+			case <-deadline:
+				logger.Warnf("[healthcheck] session %s reached hard TTL (%s) — triggering auto-stop", sessionID, liveCheckHardTTL)
+				if _, err := s.Stop(context.Background()); err != nil {
+					logger.Errorf("[healthcheck] auto-stop (hard TTL) failed: %v", err)
+				}
+				return
+			case <-ticker.C:
+				s.mu.Lock()
+				if s.session.ID != sessionID {
+					s.mu.Unlock()
+					return
+				}
+				if s.session.State != model.StateLive {
+					s.mu.Unlock()
+					return
+				}
+				channelName := s.session.AgoraChannel
+				s.mu.Unlock()
+
+				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				converters, convErr := s.agoraMediaPush.ListConvertersByChannel(ctx, channelName)
+				broadcasters, channelExists, bcastErr := s.agoraChannel.QueryBroadcasters(ctx, channelName)
+				cancel()
+
+				if convErr != nil {
+					logger.Warnf("[healthcheck] session %s: list converters error (skipping): %v", sessionID, convErr)
+					continue
+				}
+				if bcastErr != nil {
+					logger.Warnf("[healthcheck] session %s: query broadcasters error (skipping): %v", sessionID, bcastErr)
+					continue
+				}
+
+				healthy := len(converters) > 0 && channelExists && len(broadcasters) > 0
+				if healthy {
+					if misses > 0 {
+						logger.Infof("[healthcheck] session %s recovered after %d miss(es), resetting", sessionID, misses)
+					}
+					misses = 0
+					continue
+				}
+
+				misses++
+				logger.Warnf("[healthcheck] session %s unhealthy tick %d/%d (converters=%d channelExists=%v broadcasters=%d)",
+					sessionID, misses, liveCheckMaxMisses, len(converters), channelExists, len(broadcasters))
+				if misses >= liveCheckMaxMisses {
+					logger.Warnf("[healthcheck] session %s: %d consecutive unhealthy ticks — triggering auto-stop", sessionID, liveCheckMaxMisses)
+					if _, err := s.Stop(context.Background()); err != nil {
+						logger.Errorf("[healthcheck] auto-stop failed: %v", err)
+					}
+					return
+				}
+			}
+		}
+	}()
 }
 
 // startWatchdog schedules an automatic stop for the given session after ttl.
