@@ -19,12 +19,12 @@
 
 ## 前端開播模型
 
-前端開播流程不再透過後端 `prepare` / `start` 兩階段預熱，而是直接由 Agora 頻道事件驅動：
+前端開播流程不再透過後端 `prepare` / `start` 兩階段預熱，而是**直接由 Agora 頻道事件驅動**：
 
-1. **取得 Token**：前端向後端取得 Agora Token，此操作不改變 Streaming 狀態。
+1. **取得 Token**：前端向後端取得 Agora Token。此操作不改變 Streaming 狀態。
 2. **加入 Agora 頻道**：前端使用 Token 直接 `joinChannel`，開始推流。
 3. **準備中畫面**：前端在加入頻道後即顯示「準備中」畫面。此 UX 狀態純由前端自行管理，**後端 Streaming 狀態在此階段仍為 idle**。
-4. **後端觸發**：Agora 偵測到主播加入頻道，向後端發送 NCS event 103，後端接收後才開始分配 GCP / YouTube 資源並啟動 Media Push。
+4. **後端接到事件後觸發**：Agora 偵測到主播加入頻道，向後端發送 NCS event 103，後端接收後才開始分配 GCP / YouTube 資源，待資源就緒後啟動 Media Push。
 
 ---
 
