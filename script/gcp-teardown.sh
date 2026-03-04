@@ -97,53 +97,92 @@ run() {
 
 echo ""
 info "════ Step 1：清除 Live Stream API 執行時資源 ════"
-# Live Stream 的 Channel/Input/Event 是執行時動態建立的，需先清除
+# Live Stream API 無 gcloud CLI 支援，改用 REST API + access token
 
-# 停止所有 Channel 並刪除 Event
-info "列出所有 Channel..."
-CHANNELS=$(gcloud beta livestream channels list \
-  --location="$REGION" \
-  --format="value(name)" 2>/dev/null || true)
+LIVESTREAM_BASE="https://livestream.googleapis.com/v1/projects/${PROJECT_ID}/locations/${REGION}"
+ACCESS_TOKEN=$(gcloud auth print-access-token 2>/dev/null || true)
 
-if [[ -n "$CHANNELS" ]]; then
-  while IFS= read -r channel; do
-    CHANNEL_ID=$(basename "$channel")
-    warn "停止 Channel: $CHANNEL_ID"
-    gcloud beta livestream channels stop "$CHANNEL_ID" \
-      --location="$REGION" --quiet 2>/dev/null || true
-    sleep 5
-    info "刪除 Channel Events: $CHANNEL_ID"
-    EVENTS=$(gcloud beta livestream channels events list \
-      --channel="$CHANNEL_ID" \
-      --location="$REGION" \
-      --format="value(name)" 2>/dev/null || true)
-    while IFS= read -r event; do
-      [[ -z "$event" ]] && continue
-      EVENT_ID=$(basename "$event")
-      run gcloud beta livestream channels events delete "$EVENT_ID" \
-        --channel="$CHANNEL_ID" --location="$REGION" --quiet
-    done <<< "$EVENTS"
-    run gcloud beta livestream channels delete "$CHANNEL_ID" \
-      --location="$REGION" --quiet
-  done <<< "$CHANNELS"
+if [[ -z "$ACCESS_TOKEN" ]]; then
+  warn "無法取得 access token，跳過 Live Stream 資源清除"
 else
-  skip "無 Channel 資源"
-fi
+  # ── 停止並刪除所有 Channel ──────────────────────────────────────────────
+  info "列出所有 Channel..."
+  CHANNELS_JSON=$(timeout 30 curl -sf \
+    -H "Authorization: Bearer $ACCESS_TOKEN" \
+    "${LIVESTREAM_BASE}/channels" 2>/dev/null || echo "{}")
 
-info "列出所有 Input..."
-INPUTS=$(gcloud beta livestream inputs list \
-  --location="$REGION" \
-  --format="value(name)" 2>/dev/null || true)
+  CHANNEL_IDS=$(echo "$CHANNELS_JSON" \
+    | grep -o '"name": *"[^"]*"' \
+    | sed 's/.*\/channels\///' \
+    | tr -d '"' || true)
 
-if [[ -n "$INPUTS" ]]; then
-  while IFS= read -r input; do
-    [[ -z "$input" ]] && continue
-    INPUT_ID=$(basename "$input")
-    run gcloud beta livestream inputs delete "$INPUT_ID" \
-      --location="$REGION" --quiet
-  done <<< "$INPUTS"
-else
-  skip "無 Input 資源"
+  if [[ -n "$CHANNEL_IDS" ]]; then
+    while IFS= read -r CHANNEL_ID; do
+      [[ -z "$CHANNEL_ID" ]] && continue
+      warn "停止 Channel: $CHANNEL_ID"
+      timeout 30 curl -sf -X POST \
+        -H "Authorization: Bearer $ACCESS_TOKEN" \
+        "${LIVESTREAM_BASE}/channels/${CHANNEL_ID}:stop" 2>/dev/null || true
+      sleep 5
+
+      info "刪除 Channel Events: $CHANNEL_ID"
+      EVENTS_JSON=$(timeout 30 curl -sf \
+        -H "Authorization: Bearer $ACCESS_TOKEN" \
+        "${LIVESTREAM_BASE}/channels/${CHANNEL_ID}/events" 2>/dev/null || echo "{}")
+
+      EVENT_IDS=$(echo "$EVENTS_JSON" \
+        | grep -o '"name": *"[^"]*"' \
+        | sed 's/.*\/events\///' \
+        | tr -d '"' || true)
+
+      while IFS= read -r EVENT_ID; do
+        [[ -z "$EVENT_ID" ]] && continue
+        if timeout 30 curl -sf -X DELETE \
+          -H "Authorization: Bearer $ACCESS_TOKEN" \
+          "${LIVESTREAM_BASE}/channels/${CHANNEL_ID}/events/${EVENT_ID}" 2>/dev/null; then
+          success "刪除 Event: $EVENT_ID"
+        else
+          skip "Event 已不存在：$EVENT_ID"
+        fi
+      done <<< "$EVENT_IDS"
+
+      if timeout 30 curl -sf -X DELETE \
+        -H "Authorization: Bearer $ACCESS_TOKEN" \
+        "${LIVESTREAM_BASE}/channels/${CHANNEL_ID}" 2>/dev/null; then
+        success "刪除 Channel: $CHANNEL_ID"
+      else
+        skip "Channel 已不存在：$CHANNEL_ID"
+      fi
+    done <<< "$CHANNEL_IDS"
+  else
+    skip "無 Channel 資源"
+  fi
+
+  # ── 刪除所有 Input ────────────────────────────────────────────────────────
+  info "列出所有 Input..."
+  INPUTS_JSON=$(timeout 30 curl -sf \
+    -H "Authorization: Bearer $ACCESS_TOKEN" \
+    "${LIVESTREAM_BASE}/inputs" 2>/dev/null || echo "{}")
+
+  INPUT_IDS=$(echo "$INPUTS_JSON" \
+    | grep -o '"name": *"[^"]*"' \
+    | sed 's/.*\/inputs\///' \
+    | tr -d '"' || true)
+
+  if [[ -n "$INPUT_IDS" ]]; then
+    while IFS= read -r INPUT_ID; do
+      [[ -z "$INPUT_ID" ]] && continue
+      if timeout 30 curl -sf -X DELETE \
+        -H "Authorization: Bearer $ACCESS_TOKEN" \
+        "${LIVESTREAM_BASE}/inputs/${INPUT_ID}" 2>/dev/null; then
+        success "刪除 Input: $INPUT_ID"
+      else
+        skip "Input 已不存在：$INPUT_ID"
+      fi
+    done <<< "$INPUT_IDS"
+  else
+    skip "無 Input 資源"
+  fi
 fi
 
 echo ""
