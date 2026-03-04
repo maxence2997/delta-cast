@@ -191,7 +191,7 @@ func (s *LiveService) allocateResources(sessionID string) {
 			}
 		}
 		if s.relay.YouTubeRelayEnabled && broadcastID != "" {
-			if err := s.youtube.TransitionBroadcast(cleanupCtx, broadcastID, "complete"); err != nil {
+			if err := s.youtube.TransitionBroadcast(cleanupCtx, broadcastID, model.YouTubeBroadcastStatusComplete); err != nil {
 				logger.Warnf("[prepare] cleanup: youtube transition: %v", err)
 			}
 		}
@@ -306,9 +306,9 @@ func (s *LiveService) Start(ctx context.Context, appID string) (*model.StartResp
 }
 
 // HandleMediaPushWebhook processes Agora Media Push notification events (productId=5).
-// Event types: 1=ConverterCreated, 2=ConverterConfigChanged, 3=ConverterStateChanged, 4=ConverterDestroyed.
+// Event types: see model.MediaPushEventType constants (ConverterCreated, ConverterConfigChanged, ConverterStateChanged, ConverterDestroyed).
 // noticeID is used for deduplication: duplicate deliveries of the same notification are silently ignored.
-func (s *LiveService) HandleMediaPushWebhook(_ context.Context, noticeID string, eventType int, converterID, converterState, destroyReason string) error {
+func (s *LiveService) HandleMediaPushWebhook(_ context.Context, noticeID string, eventType model.MediaPushEventType, converterID string, converterState model.ConverterState, destroyReason string) error {
 	if noticeID != "" {
 		s.mu.Lock()
 		if _, seen := s.session.SeenNoticeIDs[noticeID]; seen {
@@ -320,21 +320,21 @@ func (s *LiveService) HandleMediaPushWebhook(_ context.Context, noticeID string,
 		s.mu.Unlock()
 	}
 	switch eventType {
-	case 1:
+	case model.MediaPushEventConverterCreated:
 		logger.Infof("media push converter created: id=%s", converterID)
-	case 2:
+	case model.MediaPushEventConverterConfigChanged:
 		logger.Infof("media push converter config changed: id=%s", converterID)
-	case 3:
+	case model.MediaPushEventConverterStateChanged:
 		switch converterState {
-		case "running":
+		case model.ConverterStateRunning:
 			logger.Infof("media push converter running: id=%s", converterID)
-		case "failed":
+		case model.ConverterStateFailed:
 			logger.Errorf("media push converter failed: id=%s", converterID)
 		default:
 			logger.Infof("media push converter state changed: id=%s state=%s", converterID, converterState)
 		}
-	case 4:
-		if destroyReason == "Internal Error" {
+	case model.MediaPushEventConverterDestroyed:
+		if destroyReason == model.ConverterDestroyReasonInternalError {
 			logger.Errorf("media push converter destroyed unexpectedly: id=%s reason=%s", converterID, destroyReason)
 		} else {
 			logger.Infof("media push converter destroyed: id=%s reason=%s", converterID, destroyReason)
@@ -346,11 +346,11 @@ func (s *LiveService) HandleMediaPushWebhook(_ context.Context, noticeID string,
 }
 
 // HandleChannelWebhook processes Agora RTC Channel NCS events (productId=1).
-// For event 103 (broadcaster joins channel), it triggers Media Push to both targets.
+// For event ChannelEventBroadcasterJoin (103), it triggers Media Push to both targets.
 // noticeID is used for deduplication; uid is the broadcaster's Agora RTC UID;
 // channelName is the Agora channel from the NCS payload;
 // clientSeq is the sequence number used for broadcaster-join deduplication (0 if unavailable).
-func (s *LiveService) HandleChannelWebhook(ctx context.Context, noticeID string, eventType int, uid uint32, channelName string, clientSeq int64) error {
+func (s *LiveService) HandleChannelWebhook(ctx context.Context, noticeID string, eventType model.ChannelEventType, uid uint32, channelName string, clientSeq int64) error {
 	// Read-only dedup fast-path: bail out immediately if we have already processed
 	// this noticeId. Intentionally does NOT write to SeenNoticeIDs here—the
 	// canonical write happens inside the StateReady guard below so that a noticeId
@@ -365,9 +365,9 @@ func (s *LiveService) HandleChannelWebhook(ctx context.Context, noticeID string,
 			return nil
 		}
 	}
-	// Event 102 (channel destroyed) or 104 (user left with clientSeq > 0 = real broadcaster,
-	// not a Media Push bot) while live → auto-stop all resources.
-	if eventType == 102 || (eventType == 104 && clientSeq > 0) {
+	// ChannelEventChannelDestroy (channel destroyed) or ChannelEventBroadcasterLeave (user left
+	// with clientSeq > 0 = real broadcaster, not a Media Push bot) while live → auto-stop all resources.
+	if eventType == model.ChannelEventChannelDestroy || (eventType == model.ChannelEventBroadcasterLeave && clientSeq > 0) {
 		s.mu.Lock()
 		shouldStop := s.session.State == model.StateLive && (channelName == "" || s.session.AgoraChannel == "" || channelName == s.session.AgoraChannel)
 		s.mu.Unlock()
@@ -384,9 +384,9 @@ func (s *LiveService) HandleChannelWebhook(ctx context.Context, noticeID string,
 		return nil
 	}
 
-	// Only event 103 (broadcaster join) triggers business logic.
+	// Only ChannelEventBroadcasterJoin (103) triggers business logic.
 	// All other events are logged for observability and acknowledged with 200 OK.
-	if eventType != 103 {
+	if eventType != model.ChannelEventBroadcasterJoin {
 		logger.Infof("received agora channel event %d: channel=%q uid=%d clientSeq=%d (no action taken)", eventType, channelName, uid, clientSeq)
 		return nil
 	}
@@ -625,7 +625,7 @@ func (s *LiveService) Stop(ctx context.Context) (*model.StopResponse, error) {
 	// 3. Transition YouTube broadcast to complete
 	if s.relay.YouTubeRelayEnabled && broadcastID != "" {
 		logger.Infof("[stop] 3/6 transitioning YouTube broadcast %s to complete", broadcastID)
-		if err := s.youtube.TransitionBroadcast(ctx, broadcastID, "complete"); err != nil {
+		if err := s.youtube.TransitionBroadcast(ctx, broadcastID, model.YouTubeBroadcastStatusComplete); err != nil {
 			logger.Errorf("[stop] 3/6 youtube transition to complete failed: %v", err)
 		} else {
 			logger.Infof("[stop] 3/6 YouTube broadcast transitioned to complete")

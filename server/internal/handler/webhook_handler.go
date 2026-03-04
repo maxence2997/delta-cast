@@ -86,7 +86,7 @@ func (h *WebhookHandler) HandleAgoraChannelEvent(c *gin.Context) {
 		_ = json.Unmarshal(envelope.Payload, &eventPayload)
 	}
 
-	if err := h.svc.HandleChannelWebhook(c.Request.Context(), envelope.NoticeID, envelope.EventType, eventPayload.UID, eventPayload.ChannelName, eventPayload.ClientSeq); err != nil {
+	if err := h.svc.HandleChannelWebhook(c.Request.Context(), envelope.NoticeID, model.ChannelEventType(envelope.EventType), eventPayload.UID, eventPayload.ChannelName, eventPayload.ClientSeq); err != nil {
 		c.JSON(http.StatusInternalServerError, model.ErrorResponse{Error: "webhook_failed", Message: err.Error()})
 		return
 	}
@@ -130,9 +130,9 @@ func (h *WebhookHandler) HandleAgoraMediaPushEvent(c *gin.Context) {
 	if err := h.svc.HandleMediaPushWebhook(
 		c.Request.Context(),
 		envelope.NoticeID,
-		envelope.EventType,
+		model.MediaPushEventType(envelope.EventType),
 		eventPayload.Converter.ID,
-		eventPayload.Converter.State,
+		model.ConverterState(eventPayload.Converter.State),
 		eventPayload.DestroyReason,
 	); err != nil {
 		c.JSON(http.StatusInternalServerError, model.ErrorResponse{Error: "webhook_failed", Message: err.Error()})
