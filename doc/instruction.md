@@ -18,9 +18,9 @@ delta-cast/
 │   ├── go.sum
 │   ├── Dockerfile
 │   └── .env.example            # 環境變數範例（不包含敏感資訊）
-├── web/                        # 前端 Web 專案 (Next.js / React)
+├── web/                        # 前端 Web 專案 (Vite + React SPA)
 │   ├── src/
-│   │   ├── app/                # Next.js App Router 頁面
+│   │   ├── pages/              # React 頁面元件（Home、Streamer、Audience）
 │   │   ├── components/         # 共用 UI 元件
 │   │   └── lib/                # 工具函式與 hooks
 │   ├── public/                 # 靜態資源（圖片、字型等）
@@ -60,7 +60,7 @@ delta-cast/
 - 後端遵循 `handler → service → provider` 三層架構，不可跨層直接呼叫。
 - 所有第三方 API 呼叫必須封裝在 `internal/provider/` 內，handler 與 service 層不直接引用第三方 SDK。
 - Session 狀態管理集中在 `internal/service/` 層，handler 只做 request/response 轉換。
-- 前端元件遵循 Next.js App Router 慣例，頁面放 `app/`，共用元件放 `components/`。
+- 前端元件採用 Vite + React SPA 架構，頁面放 `pages/`，共用元件放 `components/`。
 
 ### 程式碼風格
 
@@ -125,8 +125,8 @@ Commit message 詳細格式規範請參閱 [.github/commit-message-instructions.
 **前端**
 
 1. 複製 `web/.env.example` 到 `web/.env.local`。
-2. 填入 `NEXT_PUBLIC_API_URL`（本機開發為 `http://localhost:8080`，生產環境為後端服務網域）。
-3. 填入 `API_TOKEN`（本機開發可使用 `server/` 的 `JWT_SECRET` 手動簽發，生產環境透過 GitHub Secrets 注入）。
+2. 填入 `VITE_API_URL`（本機開發為 `http://localhost:8080`，生產環境為後端服務網域）。
+3. 前端改為手動輸入 JWT Token（右上角輸入框），儲存於 localStorage，不需設定 `API_TOKEN` 環境變數。
 
 > **禁止將 `.env` 加入版本控制**（已在 `.gitignore` 中排除）。
 

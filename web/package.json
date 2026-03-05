@@ -3,32 +3,34 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint",
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "eslint src",
     "type-check": "tsc --noEmit",
-    "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy"
+    "deploy": "vite build && wrangler pages deploy dist"
   },
   "dependencies": {
     "agora-rtc-sdk-ng": "^4.24.2",
-    "next": "16.1.6",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-player": "^3.4.0",
+    "react-router-dom": "^6.30.0",
     "video.js": "^8.23.7"
   },
   "devDependencies": {
-    "@opennextjs/cloudflare": "^1.16.5",
-    "@tailwindcss/postcss": "^4",
+    "@eslint/js": "^9",
+    "@tailwindcss/vite": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/video.js": "^7.3.58",
+    "@vitejs/plugin-react": "^4",
     "eslint": "^9",
-    "eslint-config-next": "16.1.6",
     "tailwindcss": "^4",
     "typescript": "^5",
+    "typescript-eslint": "^8",
+    "vite": "^6",
     "wrangler": "^4.67.0"
   }
 }

@@ -1,10 +1,4 @@
-"use client";
-
-import dynamic from "next/dynamic";
-
-const ReactPlayer = dynamic(() => import("react-player"), {
-  ssr: false,
-});
+import ReactPlayer from "react-player";
 
 interface YouTubePlayerProps {
   url: string;

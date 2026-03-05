@@ -12,15 +12,5 @@ services:
     volumes:
       - ${HOME}/deltacast-sa-key.json:/run/secrets/gcp-sa-key.json:ro
     restart: unless-stopped
-
-  web:
-    build:
-      context: ./web
-      dockerfile: Dockerfile.local
-      args:
-        - NEXT_PUBLIC_API_URL=http://localhost:8080
-    ports:
-      - "3000:3000"
-    depends_on:
-      - server
-    restart: unless-stopped
+  # 前端為獨立 React SPA，使用 `cd web && pnpm dev` 本機開發
+  # 或透過 Cloudflare Pages 靜態部署 (`pnpm deploy`)

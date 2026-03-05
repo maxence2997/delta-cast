@@ -14,7 +14,7 @@ DeltaCast is a **one-in, multi-out live streaming relay** system. A streamer pus
   - `internal/model/` → shared data structures and types
   - `internal/config/` → environment variable loading and configuration
   - **Never skip layers** — handlers must not call providers directly; services must not import `net/http`.
-- **`web/`** — Next.js 16 + Tailwind CSS. App Router (`app/` for pages, `components/` for shared UI). Player: video.js (GCP HLS) + react-player (YouTube).
+- **`web/`** — Vite + React 19 + Tailwind CSS。SPA 架構（`pages/` 為頁面、`components/` 為共用 UI、`lib/` 為 hooks 與工具）。路由：react-router-dom v6。Player: video.js (GCP HLS) + react-player (YouTube)。
 - **`mobile/`** — Future iOS (Swift) / Android (Kotlin) clients.
 
 ## Key API Endpoints

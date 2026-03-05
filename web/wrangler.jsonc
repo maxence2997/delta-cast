@@ -1,22 +1,7 @@
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
 	"name": "delta-cast",
-	"main": ".open-next/worker.js",
-	"compatibility_date": "2026-02-18",
-	// 停用 workers.dev 子網域（透過 CF Dashboard 設定 custom domain）
-	"workers_dev": false,
-	// 停用 preview URL
-	"preview_urls": false,
-	"compatibility_flags": [
-		// 啟用 Node.js API 相容性
-		// see https://developers.cloudflare.com/workers/configuration/compatibility-flags/#nodejs-compatibility-flag
-		"nodejs_compat",
-		// 允許 fetch 公開 URL
-		// see https://developers.cloudflare.com/workers/configuration/compatibility-flags/#global-fetch-strictly-public
-		"global_fetch_strictly_public"
-	],
-	"assets": {
-		"directory": ".open-next/assets",
-		"binding": "ASSETS"
-	}
+	// Cloudflare Pages 靜態部署，使用 `wrangler pages deploy dist` 發布
+	"pages_build_output_dir": "dist",
+	"compatibility_date": "2026-02-18"
 }

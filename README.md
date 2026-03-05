@@ -1,7 +1,8 @@
 # DeltaCast
 
 [![Go](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go)](https://go.dev/)
-[![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js)](https://nextjs.org/)
+[![Vite](https://img.shields.io/badge/Vite-6-646CFF?logo=vite)](https://vitejs.dev/)
+[![React](https://img.shields.io/badge/React-19-61DAFB?logo=react)](https://react.dev/)
 
 一進多出直播中繼系統。直播主透過 Agora RTC 推流至頻道，後端同步將流轉發至 **YouTube Live**（RTMP）與 **Google Cloud Live Stream API**（HLS via Cloud CDN），實現跨平台觀看。
 
@@ -126,8 +127,8 @@ make web-dev    # 僅啟動前端 (port 3000)
 | YouTube      | `YOUTUBE_*`                   |
 
 Web 前端環境變數定義於 [`web/.env.example`](web/.env.example)，目前僅包含：
-| 變數 | 說明 |
-| -------------- | -------------------- |
+| 變數                  | 說明                                               |
+| --------------------- | -------------------------------------------------- |
 | `NEXT_PUBLIC_API_URL` | 後端 API 基底 URL（例如 `https://localhost:8080`） |
 
 ---

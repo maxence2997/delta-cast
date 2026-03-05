@@ -23,7 +23,7 @@
 - **展示端**:
   - Web:
     - GCP 來源:
-      - 框架: Next.js 16 + Tailwind CSS(簡潔為主)
+      - 框架: Vite + React 19 + Tailwind CSS（SPA，react-router-dom v6）
       - 播放器: video.js（直接使用，React `useRef<HTMLVideoElement>` 包裝）+ Cloud CDN HLS URL
     - YouTube 來源：react-player(優先) 或 YouTube IFrame Player API(次要)
   - Mobile(N2H):
@@ -43,7 +43,7 @@
 ### 3.1 認證機制
 
 - **層 1 — 前端存取控制**：CF Zero Trust Access 擋於網路層，未認證者無法碰到前端站點。專用 Google / GitHub OAuth + email 白名單驗證。
-- **層 2 — API 認證**：所有後端 API 端點（Webhook 除外）需帶上 `Authorization: Bearer <JWT>` 標頭。JWT 使用 HS256 簽發，**必須包含 `"iss": "delta-cast"` claim**，POC 階段以固定 secret 驗證，不做使用者系統。前端透過 server-side 環境變數 `API_TOKEN` 載入長效靜態 admin JWT；後端提供 `/api/token` Next.js route 將 Token 安全傳遞給前端，Token 不暴露於瀏覽器 bundle。
+- **層 2 — API 認證**：所有後端 API 端點（Webhook 除外）需帶上 `Authorization: Bearer <JWT>` 標頭。JWT 使用 HS256 簽發，**必須包含 `"iss": "delta-cast"` claim**，POC 階段以固定 secret 驗證，不做使用者系統。前端透過 UI 讓使用者手動輸入長效靜態 admin JWT 並儲存至 localStorage；Token 不暴露於瀏覽器 bundle 之外，由使用者自行管理。
 - **Agora Webhook**：透過 Agora 簽章驗證（Agora Notification Callback Service 簽章機制）。
 
 ### 3.2 Session 管理

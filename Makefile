@@ -42,32 +42,32 @@ tidy: ## Tidy Go module dependencies
 vet: lint ## Alias for lint
 
 # ----------------------------------------
-# Frontend (Next.js)
+# Frontend (React / Vite)
 # ----------------------------------------
 
-web-dev: ## Start Next.js dev server
+web-dev: ## Start Vite dev server (localhost:5173)
 	cd web && pnpm dev
 
-web-build: ## Build Next.js for production
+web-build: ## Build frontend for production (output: web/dist/)
 	cd web && pnpm build
 
 web-lint: ## Lint frontend code
 	cd web && pnpm lint
 
 # ----------------------------------------
-# Docker
+# Docker（僅 backend）
 # ----------------------------------------
 
-docker-up: ## Start all services via docker-compose (local only)
+docker-up: ## Start backend service via docker-compose (local only)
 	docker-compose -f docker-compose.local.yml up -d
 
-docker-down: ## Stop all services
+docker-down: ## Stop backend service
 	docker-compose -f docker-compose.local.yml down
 
-docker-build: ## Rebuild and start all services
+docker-build: ## Rebuild and start backend service
 	docker-compose -f docker-compose.local.yml up -d --build
 
-docker-logs: ## Tail logs from all services
+docker-logs: ## Tail logs from backend service
 	docker-compose -f docker-compose.local.yml logs -f
 
 # ----------------------------------------
@@ -76,11 +76,11 @@ docker-logs: ## Tail logs from all services
 
 clean: ## Remove build artifacts
 	rm -rf server/bin server/coverage.out server/coverage.html
-	rm -rf web/.next web/out
+	rm -rf web/dist
 
 clean-all: ## Remove build artifacts + Go caches
 	rm -rf server/bin server/coverage.out server/coverage.html
-	rm -rf web/.next web/out
+	rm -rf web/dist
 	cd server && go clean -cache -testcache -modcache
 
 # ----------------------------------------
