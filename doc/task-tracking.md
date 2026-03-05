@@ -24,6 +24,10 @@
 - [x] **Web Streamer**: 實作 Agora Web SDK 推流介面。
 - [x] **Web Audience**: 實作 Video.js 播放器，串接 Cloud CDN HLS URL。
 - [x] **Integration Test**: 驗證一鍵開播後，YouTube 與 Web 播放器同步顯示畫面。
+- [x] **HLS Player 進度條與音量控制**: 啟用 video.js `controlBar`（progressControl、seekToLive、volumePanel），並設定 `liveTracker.liveTolerance = 15`，讓直播維持在最新位置並可拖動 DVR 窗口後跳回直播。
+- [x] **YouTube Player 嵌入相容性修正**: 補上 `config.youtube.playerVars.origin`，解決部分瀏覽器因缺少 origin 導致 IFrame API 初始化失敗的問題。
+
+> **Known Gotcha — YouTube Allow Embedding**: 每場直播廣播的「允許嵌入」選項預設可能未開啟。頻道擁有者以登入帳號觀看不受限，其他瀏覽器會觸發 error 101/150（iframe 內出現播放失敗畫面）。每次開播前需在 YouTube Studio → Go live → Edit → Customization 確認 **Allow embedding** 已勾選。詳見 [doc/setup/youtube-setup.md § 2.5](setup/youtube-setup.md)。
 
 ## Phase 4: Nice to Have (擴充項目)
 

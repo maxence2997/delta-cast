@@ -61,6 +61,25 @@ curl -X POST https://oauth2.googleapis.com/token \
 
 ---
 
+## 2.5 直播嵌入設定（必要）
+
+> ⚠️ 若略過此步驟，DeltaCast Audience 頁面的 YouTube 播放器只有頻道擁有者的瀏覽器（已登入帳號）能正常播放；其他人會看到 YouTube iframe 內部出現播放失敗畫面（error 101 / error 150）。
+
+### 根因
+
+YouTube 對每場直播廣播（broadcast）獨立控管嵌入權限。頻道擁有者因帳號驗證免受此限；未登入或非擁有者的瀏覽器必須明確被允許才能嵌入播放。
+
+### 設定步驟
+
+1. 前往 [YouTube Studio](https://studio.youtube.com/) → **Go live** → 選取目標廣播 → 點選 **Edit（鉛筆圖示）**。
+2. 切換至 **Customization** 分頁。
+3. 找到 **Allow embedding** 選項，確認已勾選（預設可能為關閉）。
+4. 儲存後重新整理廣播，設定立即生效。
+
+> 若使用 YouTube Data API 程式化建立廣播（DeltaCast 正常流程），目前 API 不直接提供設定 Allow embedding 的欄位；每場直播需在 YouTube Studio 手動確認一次。
+
+---
+
 ## 環境變數對應
 
 ### 個人帳號模式（預設）
