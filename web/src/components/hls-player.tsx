@@ -67,6 +67,23 @@ export default function HlsPlayer({ url }: HlsPlayerProps) {
       controls: true,
       fluid: true,
       liveui: true,
+      liveTracker: {
+        // Seek positions within 15 s of the live edge are treated as "at live",
+        // keeping playback pinned to the latest segment automatically.
+        trackingThreshold: 0,
+        liveTolerance: 15,
+      },
+      controlBar: {
+        playToggle: true,
+        progressControl: true,
+        liveDisplay: true,
+        seekToLive: true,
+        volumePanel: { inline: true },
+        fullscreenToggle: true,
+        // Hide controls that are irrelevant for live streaming.
+        remainingTimeDisplay: false,
+        pictureInPictureToggle: false,
+      },
       sources: [
         {
           src: url,
