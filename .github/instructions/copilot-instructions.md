@@ -19,13 +19,7 @@ DeltaCast is a **one-in, multi-out live streaming relay** system. A streamer pus
 
 ## Key API Endpoints
 
-| Method | Path                | Purpose                                         |
-| ------ | ------------------- | ----------------------------------------------- |
-| POST   | `/v1/live/prepare`  | Pre-warm GCP + YouTube resources (30-60s)       |
-| POST   | `/v1/live/start`    | Return Agora token, begin streaming             |
-| POST   | `/v1/live/stop`     | Stop relay, clean up all resources              |
-| GET    | `/v1/live/status`   | Poll session state                              |
-| POST   | `/v1/webhook/agora` | Agora NCS callback (no JWT, signature-verified) |
+For the full endpoint list with request/response schemas, see [`doc/api/api.md`](../../doc/api/api.md). That file is the single source of truth for all API contracts. Always update it with any changes.
 
 ## Development Workflow
 
