@@ -4,6 +4,23 @@
 
 ---
 
+## 目錄
+
+- [DeltaCast API 文件](#deltacast-api-文件)
+  - [目錄](#目錄)
+  - [認證](#認證)
+  - [API 端點](#api-端點)
+    - [POST `/v1/live/prepare`](#post-v1liveprepare)
+    - [POST `/v1/live/start`](#post-v1livestart)
+    - [POST `/v1/live/stop`](#post-v1livestop)
+    - [GET `/v1/live/status`](#get-v1livestatus)
+    - [POST `/v1/webhook/agora/channel`](#post-v1webhookagorachannel)
+    - [POST `/v1/webhook/agora/media-push`](#post-v1webhookagoramedia-push)
+
+> Session 資料模型、Agora Media Push 模式設定與系統注意事項請參閱 [`doc/spec.md`](../spec.md)。
+
+---
+
 ## 認證
 
 除 Webhook 端點外，所有 API 請求必須在 Header 帶上 JWT Bearer Token：
@@ -322,90 +339,3 @@ Content-Type: application/json
 
 > 目前僅做 log，不觸發額外狀態變更。
 
----
-
-## 資料模型
-
-### Session（in-memory，`server/internal/model/session.go`）
-
-| 欄位                  | 類型         | 說明                                             |
-| --------------------- | ------------ | ------------------------------------------------ |
-| `id`                  | string       | 8 碼短 UUID（`uuid.New().String()[:8]`）         |
-| `state`               | SessionState | `idle \| preparing \| ready \| live \| stopping` |
-| `createdAt`           | time.Time    | Session 建立時間                                 |
-| `agoraChannel`        | string       | Agora 頻道名稱，格式：`deltacast-{id}`           |
-| `gcpInputID`          | string       | GCP Input 資源 ID                                |
-| `gcpChannelID`        | string       | GCP Channel 資源 ID                              |
-| `gcpInputURI`         | string       | GCP RTMP Push URI（Agora → GCP）                 |
-| `gcpPlaybackURL`      | string       | HLS 播放 URL（Cloud CDN）                        |
-| `youtubeBroadcastID`  | string       | YouTube Broadcast ID                             |
-| `youtubeStreamID`     | string       | YouTube Stream ID                                |
-| `youtubeStreamKey`    | string       | YouTube Stream Key                               |
-| `youtubeRtmpURL`      | string       | `{rtmpURL}/{streamKey}`                          |
-| `youtubeWatchUrl`     | string       | `https://www.youtube.com/watch?v={broadcastID}`  |
-| `mediaPushGcpSid`     | string       | Agora Converter ID（GCP 目標）                   |
-| `mediaPushYoutubeSid` | string       | Agora Converter ID（YouTube 目標）               |
-
-### API Response 結構（`server/internal/model/api.go`）
-
-**PrepareResponse**
-
-```json
-{ "sessionId": "string", "state": "SessionState", "message": "string" }
-```
-
-**StartResponse**
-
-```json
-{
-  "sessionId": "string",
-  "agoraAppId": "string",
-  "agoraChannel": "string",
-  "agoraToken": "string",
-  "agoraUid": 0
-}
-```
-
-**StopResponse**
-
-```json
-{ "sessionId": "string", "state": "SessionState", "message": "string" }
-```
-
-**StatusResponse**
-
-```json
-{
-  "sessionId": "string",
-  "state": "SessionState",
-  "gcpPlaybackUrl": "string (omitempty)",
-  "youtubeWatchUrl": "string (omitempty)"
-}
-```
-
-**ErrorResponse**
-
-```json
-{ "error": "error_code", "message": "human-readable description" }
-```
-
----
-
-## Agora Media Push 模式
-
-| 模式                  | 環境變數                          | 說明                                                               |
-| --------------------- | --------------------------------- | ------------------------------------------------------------------ |
-| **Raw Relay（預設）** | `AGORA_TRANSCODING_ENABLED=false` | 直接轉發原始串流，不重新編碼，成本最低；推流端須輸出 H.264/AAC     |
-| **轉碼模式**          | `AGORA_TRANSCODING_ENABLED=true`  | H.264 High + AAC LC，720p / 30fps / 2500kbps video + 128kbps audio |
-
----
-
-## 注意事項
-
-| 項目             | 說明                                                                                     |
-| ---------------- | ---------------------------------------------------------------------------------------- |
-| **GCP 計費風險** | GCP Live Stream API 按時段計費，Stop 流程每步失敗只 log、不中斷，確保資源完整釋放        |
-| **冪等性**       | Agora NCS 可能重複送事件；後端以 Session 狀態檢查是否已處理（`live` 狀態下忽略重複 103） |
-| **延遲預期**     | HLS（GCP）約 10–30 秒；YouTube RTMP 約 5–10 秒                                           |
-| **單一 Session** | POC 階段僅支援一個活躍 Session，重複呼叫 `prepare` 回傳現有 Session                      |
-| **Agora Codec**  | 推流端 Agora RTC SDK 必須使用 `codec: "h264"`，VP8 無法通過 Raw Relay 到 YouTube/GCP     |

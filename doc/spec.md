@@ -75,7 +75,25 @@ stateDiagram-v2
 | `ready`     | 資源就緒，播放 URL 已填入，等待推流；**5 分鐘**內未 start 則 watchdog 自動 stop                                   |
 | `live`      | 串流進行中，有實際內容；每 5 分鐘 health check，連續 3 次無 converter/主播（15 分鐘）或達 4 小時硬上限則自動 stop |
 | `stopping`  | 資源清理中；手動觸發、Agora NCS event 102/104 自動觸發、或 watchdog TTL 觸發                                      |
+### Session 資料模型（`server/internal/model/session.go`）
 
+| 欄位                  | 類型         | 說明                                             |
+| --------------------- | ------------ | ------------------------------------------------ |
+| `id`                  | string       | 8 碼短 UUID（`uuid.New().String()[:8]`）         |
+| `state`               | SessionState | `idle \| preparing \| ready \| live \| stopping` |
+| `createdAt`           | time.Time    | Session 建立時間                                 |
+| `agoraChannel`        | string       | Agora 頻道名稱，格式：`deltacast-{id}`           |
+| `gcpInputID`          | string       | GCP Input 資源 ID                                |
+| `gcpChannelID`        | string       | GCP Channel 資源 ID                              |
+| `gcpInputURI`         | string       | GCP RTMP Push URI（Agora → GCP）                 |
+| `gcpPlaybackURL`      | string       | HLS 播放 URL（Cloud CDN）                        |
+| `youtubeBroadcastID`  | string       | YouTube Broadcast ID                             |
+| `youtubeStreamID`     | string       | YouTube Stream ID                                |
+| `youtubeStreamKey`    | string       | YouTube Stream Key                               |
+| `youtubeRtmpURL`      | string       | `{rtmpURL}/{streamKey}`                          |
+| `youtubeWatchUrl`     | string       | `https://www.youtube.com/watch?v={broadcastID}`  |
+| `mediaPushGcpSid`     | string       | Agora Converter ID（GCP 目標）                   |
+| `mediaPushYoutubeSid` | string       | Agora Converter ID（YouTube 目標）               |
 ### 3.3 GCP 資源生命週期
 
 GCP Live Stream API 的 Channel 建立需要 **30-60 秒**，為降低開播延遲，採用 **兩階段式預熱（Pre-warm）** 策略：
