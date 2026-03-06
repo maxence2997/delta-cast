@@ -106,7 +106,7 @@ func (s *LiveService) Prepare(ctx context.Context) (*model.PrepareResponse, erro
 	return &model.PrepareResponse{
 		SessionID: sessionID,
 		State:     model.StatePreparing,
-		Message:   "resource allocation started, poll /v1/live/status for updates",
+		Message:   "resource allocation started, poll /v1/live for updates",
 	}, nil
 }
 

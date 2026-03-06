@@ -79,13 +79,11 @@ func main() {
 
 	v1 := r.Group("/v1")
 	{
-		live := v1.Group("/live", middleware.JWTAuth(cfg.JWTSecret))
-		{
-			live.POST("/prepare", liveHandler.Prepare)
-			live.POST("/start", liveHandler.Start)
-			live.POST("/stop", liveHandler.Stop)
-			live.GET("/status", liveHandler.Status)
-		}
+		jwtAuth := middleware.JWTAuth(cfg.JWTSecret)
+		v1.POST("/live:prepare", jwtAuth, liveHandler.Prepare)
+		v1.POST("/live:start", jwtAuth, liveHandler.Start)
+		v1.POST("/live:stop", jwtAuth, liveHandler.Stop)
+		v1.GET("/live", jwtAuth, liveHandler.Status)
 
 		v1.POST("/webhook/agora/channel", webhookHandler.HandleAgoraChannelEvent)
 		v1.POST("/webhook/agora/media-push", webhookHandler.HandleAgoraMediaPushEvent)

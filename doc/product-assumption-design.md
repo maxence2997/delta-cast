@@ -5,17 +5,19 @@
 ## 背景描述
 
 目前 PoC 直播開播流程為三階段式：
+
 1. 前端呼叫 `prepare` API 進行預熱，後端分配 GCP / YouTube 資源
 2. 前端輪詢 `status` 狀態，直到完成後才呼叫 `start` API 正式開始直播。
 3. 後端啟動 Media Push 將直播串流推送到 GCP / YouTube。
 
 而產品面來說，具有兩種開始直播模式:
+
 - **立即開播**（前端直接 `joinChannel`）
 - **預約開播**（前端先設定預計開播時間，等時間到再`joinChannel`），而預定時間前30分鐘，以及後10分鐘內主播可以隨時開始直播
 
 因此，希望後端有一套統一的 Streaming 狀態機，能同時支援兩種模式，並且盡可能簡化前端開播流程。
 
->- **Streaming 定義**：一次直播事件，包含從前端取得 Token、分配 GCP/YouTube 資源、啟動 Media Push、到關播的完整流程。**PoC 層面等同 Session**。
+> - **Streaming 定義**：一次直播事件，包含從前端取得 Token、分配 GCP/YouTube 資源、啟動 Media Push、到關播的完整流程。**PoC 層面等同 Session**。
 
 ## 前端開播模型
 
@@ -37,8 +39,8 @@ stateDiagram-v2
     preparing --> live : allocateResources 完成 　<br/>（GCP + YT 就緒後，<br/> Media Push 啟動）
     preparing --> stopping : allocateResources 失敗 <br/>（GCP 或 YT 錯誤）
     preparing --> stopping : Agora NCS event 102 / 104 <br/>（主播提前離開）
-    preparing --> stopping : POST /v1/live/stop <br/>（手動取消）
-    live --> stopping : POST /v1/live/stop <br/>（手動）
+    preparing --> stopping : POST /v1/live:stop <br/>（手動取消）
+    live --> stopping : POST /v1/live:stop <br/>（手動）
     live --> stopping : Agora NCS event 102 / 104（自動）
     live --> stopping : Health check <br/>（15 分鐘無 converter/主播，或 4 小時硬上限）
     stopping --> idle : 完整 teardown 完成
@@ -65,7 +67,7 @@ sequenceDiagram
     participant AgoraMP as Agora Media Push
     participant NCS as Agora NCS (Webhook)
 
-    Streamer->>API:  拿取 Agora Token 
+    Streamer->>API:  拿取 Agora Token
     API-->>Streamer: { agoraToken, agoraChannel, agoraAppId }
     Note over API: Streaming 維持 idle，無狀態變更
 

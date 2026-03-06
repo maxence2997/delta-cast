@@ -49,20 +49,20 @@
 ### 3.2 Session 管理
 
 - POC 階段僅支援**單一活躍 Session**，後端以 in-memory state 追蹤。
-- 若已有活躍 Session，重複呼叫 `POST /v1/live/prepare` 將回傳現有 Session 資訊（不重複建立資源）。
-- 若 Session 已為 `live`，重複呼叫 `POST /v1/live/start` 會回傳新 Token，不重複建立資源。
+- 若已有活躍 Session，重複呼叫 `POST /v1/live:prepare` 將回傳現有 Session 資訊（不重複建立資源）。
+- 若 Session 已為 `live`，重複呼叫 `POST /v1/live:start` 會回傳新 Token，不重複建立資源。
 - Session 狀態機：
 
 ```mermaid
 stateDiagram-v2
     [*] --> idle
-    idle --> preparing : POST /v1/live/prepare　
+    idle --> preparing : POST /v1/live:prepare　
     preparing --> ready : allocateResources 完成 　<br/>（雙重確認通過）　
     preparing --> idle : allocateResources 失敗（GCP 或 YT 錯誤）
     preparing --> stopping : Stop() 呼叫 <br/>（allocCancel 取消 ctx）
     ready --> live : Agora NCS event 103
     ready --> stopping : TTL watchdog <br/>（5 分鐘無 start）
-    live --> stopping : POST /v1/live/stop 　<br/>　（手動）
+    live --> stopping : POST /v1/live:stop 　<br/>　（手動）
     live --> stopping : Agora NCS event 102 / 104（自動）
     live --> stopping : Health check <br/>（15 分鐘無 converter/主播，或 4 小時硬上限）
     stopping --> idle : 完整 teardown 完成
@@ -75,6 +75,7 @@ stateDiagram-v2
 | `ready`     | 資源就緒，播放 URL 已填入，等待推流；**5 分鐘**內未 start 則 watchdog 自動 stop                                   |
 | `live`      | 串流進行中，有實際內容；每 5 分鐘 health check，連續 3 次無 converter/主播（15 分鐘）或達 4 小時硬上限則自動 stop |
 | `stopping`  | 資源清理中；手動觸發、Agora NCS event 102/104 自動觸發、或 watchdog TTL 觸發                                      |
+
 ### Session 資料模型（`server/internal/model/session.go`）
 
 | 欄位                  | 類型         | 說明                                             |
@@ -94,14 +95,15 @@ stateDiagram-v2
 | `youtubeWatchUrl`     | string       | `https://www.youtube.com/watch?v={broadcastID}`  |
 | `mediaPushGcpSid`     | string       | Agora Converter ID（GCP 目標）                   |
 | `mediaPushYoutubeSid` | string       | Agora Converter ID（YouTube 目標）               |
+
 ### 3.3 GCP 資源生命週期
 
 GCP Live Stream API 的 Channel 建立需要 **30-60 秒**，為降低開播延遲，採用 **兩階段式預熱（Pre-warm）** 策略：
 
-- **Prepare 階段**：前端呼叫 `POST /v1/live/prepare`，後端非同步建立 GCP Input + Channel 與 YouTube Broadcast。此階段耗時較長，前端可顯示「準備中」狀態。
-- **Start 階段**：資源就緒後前端呼叫 `POST /v1/live/start`，後端僅需回傳 Agora Token，前端即可立即開始推流，無需等待資源分配。
+- **Prepare 階段**：前端呼叫 `POST /v1/live:prepare`，後端非同步建立 GCP Input + Channel 與 YouTube Broadcast。此階段耗時較長，前端可顯示「準備中」狀態。
+- **Start 階段**：資源就緒後前端呼叫 `POST /v1/live:start`，後端僅需回傳 Agora Token，前端即可立即開始推流，無需等待資源分配。
 
-資源清理：`POST /v1/live/stop` 時一併刪除 GCP Input + Channel，避免閒置計費。
+資源清理：`POST /v1/live:stop` 時一併刪除 GCP Input + Channel，避免閒置計費。
 
 ### 3.4 核心時序流程
 
@@ -117,7 +119,7 @@ sequenceDiagram
     participant AgoraMP as Agora Media Push
     participant NCS as Agora NCS (Webhook)
 
-    Streamer->>API: POST /v1/live/prepare (JWT)
+    Streamer->>API: POST /v1/live:prepare (JWT)
     API-->>Streamer: 200 { state: "preparing" }
     Note over API: 背景非同步分配資源（約 30-60 秒）
 
@@ -132,11 +134,11 @@ sequenceDiagram
     Note over API: Session state: preparing → ready
 
     loop 每 2 秒輪詢直到 state = "ready"
-        Streamer->>API: GET /v1/live/status (JWT)
+        Streamer->>API: GET /v1/live (JWT)
         API-->>Streamer: { state: "preparing" | "ready" }
     end
 
-    Streamer->>API: POST /v1/live/start (JWT)
+    Streamer->>API: POST /v1/live:start (JWT)
     API-->>Streamer: { agoraToken, agoraChannel, agoraAppId }
     Note over API: Session state 維持 "ready"（start 不改變狀態）
 
@@ -162,9 +164,9 @@ sequenceDiagram
 
 #### 收播端流程
 
-收播端不需要呼叫 `prepare` / `start` / `stop`，只需輪詢 `GET /v1/live/status`。因為 POC 是單一 Session，不需要房間選擇邏輯。
+收播端不需要呼叫 `prepare` / `start` / `stop`，只需輪詢 `GET /v1/live`。因為 POC 是單一 Session，不需要房間選擇邏輯。
 
-`gcpPlaybackUrl` 與 `youtubeWatchUrl` 從 `ready` 狀態起即填入，但只有 `live` 狀態才有實際串流內容。各狀態下的欄位可用性詳見 [`doc/api/api.md`](api/api.md) 的 `GET /v1/live/status` 章節。
+`gcpPlaybackUrl` 與 `youtubeWatchUrl` 從 `ready` 狀態起即填入，但只有 `live` 狀態才有實際串流內容。各狀態下的欄位可用性詳見 [`doc/api/api.md`](api/api.md) 的 `GET /v1/live` 章節。
 
 ```mermaid
 sequenceDiagram
@@ -175,7 +177,7 @@ sequenceDiagram
 
     Note over Audience: 頁面載入後開始輪詢
     loop 每 2 秒，直到 state = "live"
-        Audience->>API: GET /v1/live/status (JWT)
+        Audience->>API: GET /v1/live (JWT)
         API-->>Audience: { state, gcpPlaybackUrl, youtubeWatchUrl }
     end
 
@@ -184,7 +186,7 @@ sequenceDiagram
     Audience->>YT: YouTube 嵌入播放（youtubeWatchUrl）延遲約 5-10 秒
 
     loop 持續輪詢偵測關播
-        Audience->>API: GET /v1/live/status (JWT)
+        Audience->>API: GET /v1/live (JWT)
         API-->>Audience: { state: "idle" }
     end
     Note over Audience: state = "idle" → 顯示「無直播」
@@ -200,7 +202,7 @@ sequenceDiagram
     participant YT as YouTube Data API
     participant GCP as GCP Live Stream API
 
-    Streamer->>API: POST /v1/live/stop (JWT)
+    Streamer->>API: POST /v1/live:stop (JWT)
     Note over API: Session state → "stopping"
 
     API->>AgoraMP: StopMediaPush(gcpConverterID)
@@ -218,7 +220,7 @@ sequenceDiagram
 
 #### Preparing 中途收到 Stop
 
-`POST /v1/live/stop` 可在任意狀態下呼叫，包括仍在 `preparing` 的過程中。此時後端的處理機制如下：
+`POST /v1/live:stop` 可在任意狀態下呼叫，包括仍在 `preparing` 的過程中。此時後端的處理機制如下：
 
 1. `Stop` 設定 session state 為 `stopping`，呼叫 `allocCancel()` 取消 allocation goroutine 的 context，並快照此時所有資源 ID（preparing 階段尚未寫入，均為空字串）。
 2. `Stop` 同步執行 6 個清理步驟。由於所有資源 ID 均為空，每個步驟的 guard（`if channelID != ""`）全部跳過，**Stop() 幾乎瞬間完成**，session 重設為 `idle`，回傳 `{state: "idle"}`。
@@ -235,11 +237,11 @@ sequenceDiagram
     participant API as DeltaCast API
     participant GCP as GCP Live Stream API
 
-    Streamer->>API: POST /v1/live/prepare
+    Streamer->>API: POST /v1/live:prepare
     Note over API: state → preparing，背景執行 allocateResources
     API->>GCP: CreateInput（進行中）
 
-    Streamer->>API: POST /v1/live/stop
+    Streamer->>API: POST /v1/live:stop
     Note over API: state → stopping，快照 ID（全為空），呼叫 allocCancel()
     Note over API: 同步執行 6 步（ID 全空，guard 全部跳過），reset → idle
     API-->>Streamer: { state: "idle" }
@@ -255,10 +257,10 @@ sequenceDiagram
 
 | Method | Path                           | 說明                                              |
 | ------ | ------------------------------ | ------------------------------------------------- |
-| POST   | `/v1/live/prepare`             | 預熱資源（GCP + YouTube），回傳 Session 與狀態    |
-| POST   | `/v1/live/start`               | 回傳 Agora Token（不改變 Session 狀態）           |
-| POST   | `/v1/live/stop`                | 關播並釋放所有資源                                |
-| GET    | `/v1/live/status`              | 查詢當前 Session 狀態與播放 URL                   |
+| POST   | `/v1/live:prepare`             | 預熱資源（GCP + YouTube），回傳 Session 與狀態    |
+| POST   | `/v1/live:start`               | 回傳 Agora Token（不改變 Session 狀態）           |
+| POST   | `/v1/live:stop`                | 關播並釋放所有資源                                |
+| GET    | `/v1/live`                     | 查詢當前 Session 狀態與播放 URL                   |
 | POST   | `/v1/webhook/agora/channel`    | Agora RTC Channel NCS（無需 JWT，Agora 簽章驗證） |
 | POST   | `/v1/webhook/agora/media-push` | Agora Media Push NCS（無需 JWT，Agora 簽章驗證）  |
 | GET    | `/health`                      | 健康檢查（無需 JWT）                              |

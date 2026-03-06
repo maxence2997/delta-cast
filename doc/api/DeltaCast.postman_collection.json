@@ -53,9 +53,9 @@
               }
             ],
             "url": {
-              "raw": "{{base_url}}/v1/live/prepare",
+              "raw": "{{base_url}}/v1/live:prepare",
               "host": ["{{base_url}}"],
-              "path": ["v1", "live", "prepare"]
+              "path": ["v1", "live:prepare"]
             },
             "description": "預熱 GCP 與 YouTube 資源。立即回傳，資源分配在背景非同步執行（約 30–60 秒）。\n\n成功後 `session_id` 會自動存入 Collection Variable，供後續請求使用。\n\n**後台並行任務：**\n- GCP: CreateInput → CreateChannel → StartChannel → WaitForChannelReady\n- YouTube: CreateBroadcast → CreateStream → BindBroadcastToStream\n\n完成後 Session 狀態轉為 `ready`；失敗則回到 `idle`。"
           },
@@ -67,7 +67,7 @@
               "header": [
                 { "key": "Content-Type", "value": "application/json" }
               ],
-              "body": "{\n  \"sessionId\": \"a1b2c3d4\",\n  \"state\": \"preparing\",\n  \"message\": \"resource allocation started, poll /v1/live/status for updates\"\n}"
+              "body": "{\n  \"sessionId\": \"a1b2c3d4\",\n  \"state\": \"preparing\",\n  \"message\": \"resource allocation started, poll /v1/live for updates\"\n}"
             },
             {
               "name": "200 — Session 已存在",
@@ -118,9 +118,9 @@
               }
             ],
             "url": {
-              "raw": "{{base_url}}/v1/live/status",
+              "raw": "{{base_url}}/v1/live",
               "host": ["{{base_url}}"],
-              "path": ["v1", "live", "status"]
+              "path": ["v1", "live"]
             },
             "description": "查詢當前 Session 狀態與播放 URL。\n\n**各狀態欄位可用性：**\n| 狀態 | gcpPlaybackUrl | youtubeWatchUrl |\n|---|---|---|\n| idle | 省略 | 省略 |\n| preparing | 省略 | 省略 |\n| ready | ✓ | ✓ |\n| live | ✓ | ✓ |\n| stopping | ✓ | ✓ |"
           },
@@ -165,9 +165,9 @@
               }
             ],
             "url": {
-              "raw": "{{base_url}}/v1/live/start",
+              "raw": "{{base_url}}/v1/live:start",
               "host": ["{{base_url}}"],
-              "path": ["v1", "live", "start"]
+              "path": ["v1", "live:start"]
             },
             "description": "取得 Agora RTC Token。Session 必須為 `ready` 狀態（先透過 Status 輪詢確認）。\n\n**重要**：此端點不改變 Session 狀態。前端使用回傳的 Token 加入 Agora 頻道並推流後，Agora NCS Webhook（eventType=103）才會觸發後端將狀態轉為 `live`。\n\n- Token TTL：86400 秒（24 小時）\n- `agoraUid` 固定為 `0`"
           },
@@ -203,9 +203,9 @@
               }
             ],
             "url": {
-              "raw": "{{base_url}}/v1/live/stop",
+              "raw": "{{base_url}}/v1/live:stop",
               "host": ["{{base_url}}"],
-              "path": ["v1", "live", "stop"]
+              "path": ["v1", "live:stop"]
             },
             "description": "停止直播並依序釋放所有資源。各步驟失敗只 log，不中斷後續清理。\n\n**清理順序：**\n1. 停止 Agora Media Push（GCP 目標）\n2. 停止 Agora Media Push（YouTube 目標）\n3. YouTube Broadcast 轉為 `complete`\n4. 停止 GCP Channel\n5. 刪除 GCP Channel\n6. 刪除 GCP Input\n7. Session 狀態重設為 `idle`\n\n⚠️ GCP 資源按時段計費，請確實呼叫 Stop 釋放資源。"
           },

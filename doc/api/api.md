@@ -10,10 +10,10 @@
   - [目錄](#目錄)
   - [認證](#認證)
   - [API 端點](#api-端點)
-    - [POST `/v1/live/prepare`](#post-v1liveprepare)
-    - [POST `/v1/live/start`](#post-v1livestart)
-    - [POST `/v1/live/stop`](#post-v1livestop)
-    - [GET `/v1/live/status`](#get-v1livestatus)
+    - [POST `/v1/live:prepare`](#post-v1liveprepare)
+    - [POST `/v1/live:start`](#post-v1livestart)
+    - [POST `/v1/live:stop`](#post-v1livestop)
+    - [GET `/v1/live`](#get-v1live)
     - [POST `/v1/webhook/agora/channel`](#post-v1webhookagorachannel)
     - [POST `/v1/webhook/agora/media-push`](#post-v1webhookagoramedia-push)
 
@@ -37,7 +37,7 @@ Webhook 端點不需要 JWT，改用 **Agora HMAC/SHA1 簽章驗證**（`Agora-S
 
 ## API 端點
 
-### POST `/v1/live/prepare`
+### POST `/v1/live:prepare`
 
 預熱 GCP 與 YouTube 資源。立即回傳，資源分配在背景非同步執行（約 30–60 秒）。
 
@@ -51,7 +51,7 @@ Webhook 端點不需要 JWT，改用 **Agora HMAC/SHA1 簽章驗證**（`Agora-S
 {
   "sessionId": "a1b2c3d4",
   "state": "preparing",
-  "message": "resource allocation started, poll /v1/live/status for updates"
+  "message": "resource allocation started, poll /v1/live for updates"
 }
 ```
 
@@ -87,9 +87,9 @@ Webhook 端點不需要 JWT，改用 **Agora HMAC/SHA1 簽章驗證**（`Agora-S
 
 ---
 
-### POST `/v1/live/start`
+### POST `/v1/live:start`
 
-取得 Agora Token。Session 必須為 `ready` 狀態（透過 `GET /v1/live/status` 輪詢確認後呼叫）。
+取得 Agora Token。Session 必須為 `ready` 狀態（透過 `GET /v1/live` 輪詢確認後呼叫）。
 
 > **重要**：此端點**不改變** Session 狀態。呼叫後 Session 仍維持 `ready`，前端使用取得的 Token 加入 Agora 頻道並推流，Agora 偵測到主播加入後才會透過 NCS Webhook（`eventType=103`）通知後端，後端才將狀態轉為 `live`。
 
@@ -127,7 +127,7 @@ Webhook 端點不需要 JWT，改用 **Agora HMAC/SHA1 簽章驗證**（`Agora-S
 
 ---
 
-### POST `/v1/live/stop`
+### POST `/v1/live:stop`
 
 停止直播並依序釋放所有資源。各步驟失敗只 log，不中斷後續清理。
 
@@ -165,7 +165,7 @@ Webhook 端點不需要 JWT，改用 **Agora HMAC/SHA1 簽章驗證**（`Agora-S
 }
 ```
 
-> 呼叫端收到 `state: "stopping"` 時應繼續輪詢 `GET /v1/live/status`，直到 state 轉為 `idle`。
+> 呼叫端收到 `state: "stopping"` 時應繼續輪詢 `GET /v1/live`，直到 state 轉為 `idle`。
 
 **Response `500 Internal Server Error`**：
 
@@ -191,7 +191,7 @@ Webhook 端點不需要 JWT，改用 **Agora HMAC/SHA1 簽章驗證**（`Agora-S
 
 ---
 
-### GET `/v1/live/status`
+### GET `/v1/live`
 
 查詢當前 Session 狀態與播放 URL。
 
@@ -338,4 +338,3 @@ Content-Type: application/json
 | 4         | Converter 已銷毀（`destroyReason` 填原因） |
 
 > 目前僅做 log，不觸發額外狀態變更。
-

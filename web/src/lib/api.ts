@@ -99,21 +99,21 @@ export interface StatusResponse {
 // ---- API Methods ----
 
 export function prepare(): Promise<PrepareResponse> {
-  return request<PrepareResponse>("/v1/live/prepare", { method: "POST" });
+  return request<PrepareResponse>("/v1/live:prepare", { method: "POST" });
 }
 
 export function start(): Promise<StartResponse> {
-  return request<StartResponse>("/v1/live/start", { method: "POST" });
+  return request<StartResponse>("/v1/live:start", { method: "POST" });
 }
 
 export function stop(): Promise<StopResponse> {
   // keepalive ensures the request is delivered even when the browser tab is closing.
-  return request<StopResponse>("/v1/live/stop", {
+  return request<StopResponse>("/v1/live:stop", {
     method: "POST",
     keepalive: true,
   });
 }
 
 export function getStatus(): Promise<StatusResponse> {
-  return request<StatusResponse>("/v1/live/status");
+  return request<StatusResponse>("/v1/live");
 }

@@ -13,7 +13,7 @@
 - [x] **Agora Webhook**: 實作 `POST /v1/webhook/agora`，接收 Agora NCS 事件並觸發 Media Push。
 - [x] **Live Service**: 實作 Prepare/Start/Stop 邏輯調度，管理 Session 狀態機與流媒體生命週期。
 - [x] **Agora Media Push 無轉碼直推模式**: 將 Agora Media Push 預設改為不轉碼直接推流（raw relay），透過 `AGORA_TRANSCODING_ENABLED` 環境變數可選用轉碼，降低 POC 費用。
-- [x] **Endpoints**: 完成 `POST /v1/live/prepare`、`POST /v1/live/start`、`POST /v1/live/stop`、`GET /v1/live/status`。
+- [x] **Endpoints**: 完成 `POST /v1/live:prepare`、`POST /v1/live:start`、`POST /v1/live:stop`、`GET /v1/live`。
 - [x] **Session TTL Watchdog**: `ready` 狀態 5 分鐘無 start / `live` 狀態 4 小時後自動 stop（硬上限），防止 GCP channel 閒置計費。
 - [x] **Server 啟動 Orphan Recovery**: 啟動時非同步掃描並清除 GCP 上的孤立 channel（crash 後殘留）。
 - [x] **Allocation 失敗路徑資源洩漏修復**: GCP 或 YouTube 資源分配失敗時正確呼叫 `cleanupPartialResources()`，不孤立已建立的資源。

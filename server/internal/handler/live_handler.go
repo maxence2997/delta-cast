@@ -20,7 +20,7 @@ func NewLiveHandler(svc *service.LiveService, appID string) *LiveHandler {
 	return &LiveHandler{svc: svc, appID: appID}
 }
 
-// Prepare handles POST /v1/live/prepare.
+// Prepare handles POST /v1/live:prepare.
 func (h *LiveHandler) Prepare(c *gin.Context) {
 	resp, err := h.svc.Prepare(c.Request.Context())
 	if err != nil {
@@ -33,7 +33,7 @@ func (h *LiveHandler) Prepare(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-// Start handles POST /v1/live/start.
+// Start handles POST /v1/live:start.
 func (h *LiveHandler) Start(c *gin.Context) {
 	resp, err := h.svc.Start(c.Request.Context(), h.appID)
 	if err != nil {
@@ -46,7 +46,7 @@ func (h *LiveHandler) Start(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-// Stop handles POST /v1/live/stop.
+// Stop handles POST /v1/live:stop.
 func (h *LiveHandler) Stop(c *gin.Context) {
 	resp, err := h.svc.Stop(c.Request.Context())
 	if err != nil {
@@ -59,7 +59,7 @@ func (h *LiveHandler) Stop(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-// Status handles GET /v1/live/status.
+// Status handles GET /v1/live.
 func (h *LiveHandler) Status(c *gin.Context) {
 	resp := h.svc.Status()
 	c.JSON(http.StatusOK, resp)
