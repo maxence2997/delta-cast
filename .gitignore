@@ -260,6 +260,7 @@ hs_err_pid*
 # Go
 vendor/
 tmp/
+temp/
 *.exe
 *.exe~
 *.dll
