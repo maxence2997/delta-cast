@@ -56,13 +56,13 @@
 ```mermaid
 stateDiagram-v2
     [*] --> idle
-    idle --> preparing : POST /v1/live:prepare　
+    idle --> preparing : POST /v1/live#colon;prepare　
     preparing --> ready : allocateResources 完成 　<br/>（雙重確認通過）　
     preparing --> idle : allocateResources 失敗（GCP 或 YT 錯誤）
     preparing --> stopping : Stop() 呼叫 <br/>（allocCancel 取消 ctx）
     ready --> live : Agora NCS event 103
     ready --> stopping : TTL watchdog <br/>（5 分鐘無 start）
-    live --> stopping : POST /v1/live:stop 　<br/>　（手動）
+    live --> stopping : POST /v1/live#colon;stop 　<br/>　（手動）
     live --> stopping : Agora NCS event 102 / 104（自動）
     live --> stopping : Health check <br/>（15 分鐘無 converter/主播，或 4 小時硬上限）
     stopping --> idle : 完整 teardown 完成
