@@ -24,14 +24,30 @@ For the full endpoint list with request/response schemas, see [`doc/api/api.md`]
 ## Development Workflow
 
 ```bash
-# Backend
-cd server && go run ./cmd/
+# ----------------------------------------
+# Backend (Go)
+# ----------------------------------------
+make run
 
-# Frontend
-cd web && pnpm install && pnpm dev
+# Run backend linter
+make lint
 
-# Full stack
-docker-compose -f docker-compose.local.yml up
+# Run all backend tests
+make test
+
+# ----------------------------------------
+# Frontend (React / Vite)
+# ----------------------------------------
+make web-dev
+
+# Run frontend linter
+make web-lint
+
+# Run frontend type checker
+make web-typecheck
+
+# Run all frontend tests
+make web-test
 ```
 
 ## Conventions
@@ -39,7 +55,11 @@ docker-compose -f docker-compose.local.yml up
 - **Go**: `gofmt`/`goimports`, snake_case filenames (`live_service.go`), GoDoc on public functions, `if err != nil` error handling (no panic), secrets from env vars only.
 - **TypeScript/React**: ESLint + Prettier, kebab-case filenames (`live-player.tsx`), functional components + hooks only.
 - **Markdown**: No emojis in documentation files. In Mermaid diagrams, use `<br>` for line breaks inside node labels — never `\n`.
-- **Git**: Follow the commit message rules defined in [.github/instructions/commit-message-instructions.md](../../.github/instructions/commit-message-instructions.md). Headers and body must be in Traditional Chinese. Each commit must represent exactly one logical change.
+- **Git**: 
+  - Follow the commit message rules defined in [.github/instructions/commit-message-instructions.md](../../.github/instructions/commit-message-instructions.md). 
+  - Headers and body must be in Traditional Chinese. 
+  - Each commit must represent exactly one logical change.
+  - Run formatter and tests locally before committing.
 - **Tests**: Co-located with source (`_test.go` / `.test.ts`). Cover happy path + at least one error path. Required for new service/provider functions.
 
 ## Critical Rules

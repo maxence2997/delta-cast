@@ -2,7 +2,11 @@
 # DeltaCast — Developer Makefile
 # ========================================
 
-.PHONY: help build run test lint fmt tidy vet web-dev web-build web-lint docker-up docker-down docker-build clean clean-all gcp-open gcp-close gcp-status gcp-livestream-cleanup yt-status yt-open yt-close res-open res-close res-status
+.PHONY: help build run test lint fmt tidy web-dev web-build web-lint web-typecheck web-test docker-up docker-down docker-build clean gcp-open gcp-close gcp-status gcp-livestream-cleanup yt-status yt-open yt-close res-open res-close res-status
+
+SERVER_DIR := server
+WEB_DIR := web
+
 
 # Default target
 help: ## Show available commands
@@ -14,74 +18,76 @@ help: ## Show available commands
 # ----------------------------------------
 
 build: ## Build the Go server binary
-	cd server && go build -o bin/server ./cmd/
+	@cd $(SERVER_DIR) && go build -o bin/server ./cmd/
 
 run: ## Run the Go server locally (loads server/.env.local if present)
-	cd server && set -a && [ -f .env.local ] && . .env.local; set +a && go run ./cmd/
+	@cd $(SERVER_DIR) && set -a && [ -f .env.local ] && . .env.local; set +a && go run ./cmd/
 
 test: ## Run all Go tests
-	cd server && go test ./...
-
-test-v: ## Run all Go tests (verbose)
-	cd server && go test -v ./...
+	@cd $(SERVER_DIR) && go test -race ./...
 
 test-cover: ## Run Go tests with coverage report
-	cd server && go test -coverprofile=coverage.out ./... && go tool cover -html=coverage.out -o coverage.html
-	@echo "Coverage report: server/coverage.html"
+	@cd $(SERVER_DIR) && go test -coverprofile=coverage.out ./... && go tool cover -html=coverage.out -o coverage.html
+	echo "Coverage report: $(SERVER_DIR)/coverage.html"
 
 lint: ## Run go vet
-	cd server && go vet ./...
+	cd $(SERVER_DIR) && go vet ./...
 
 fmt: ## Format Go source files
-	cd server && gofmt -w .
-	cd server && goimports -w . 2>/dev/null || true
+	@cd $(SERVER_DIR) && gofmt -w .
+	@cd $(SERVER_DIR) && goimports -w . 2>/dev/null || true
 
-tidy: ## Tidy Go module dependencies
-	cd server && go mod tidy
+# Download dependencies
+deps:
+	@cd $(SERVER_DIR) && go mod download
 
-vet: lint ## Alias for lint
+# Tidy dependencies
+tidy:
+	@cd $(SERVER_DIR) && go mod tidy
 
 # ----------------------------------------
 # Frontend (React / Vite)
 # ----------------------------------------
 
 web-dev: ## Start Vite dev server (localhost:5173)
-	cd web && pnpm dev
+	@cd $(WEB_DIR) && pnpm dev
 
 web-build: ## Build frontend for production (output: web/dist/)
-	cd web && pnpm build
+	@cd $(WEB_DIR) && pnpm build
 
 web-lint: ## Lint frontend code
-	cd web && pnpm lint
+	@cd $(WEB_DIR) && pnpm lint
+
+web-typecheck: ## Type check frontend code
+	@cd $(WEB_DIR) && pnpm typecheck
+
+web-test: ## Run frontend tests
+	@cd $(WEB_DIR) && pnpm test
 
 # ----------------------------------------
 # Docker（僅 backend）
 # ----------------------------------------
 
 docker-up: ## Start backend service via docker-compose (local only)
-	docker-compose -f docker-compose.local.yml up -d
+	@docker-compose -f docker-compose.local.yml up -d
 
 docker-down: ## Stop backend service
-	docker-compose -f docker-compose.local.yml down
+	@docker-compose -f docker-compose.local.yml down
 
 docker-build: ## Rebuild and start backend service
-	docker-compose -f docker-compose.local.yml up -d --build
+	@docker-compose -f docker-compose.local.yml up -d --build
 
 docker-logs: ## Tail logs from backend service
-	docker-compose -f docker-compose.local.yml logs -f
+	@docker-compose -f docker-compose.local.yml logs -f
 
 # ----------------------------------------
 # Setup & Utilities
 # ----------------------------------------
 
-clean: ## Remove build artifacts
-	rm -rf server/bin server/coverage.out server/coverage.html
-	rm -rf web/dist
-
-clean-all: ## Remove build artifacts + Go caches
-	rm -rf server/bin server/coverage.out server/coverage.html
-	rm -rf web/dist
-	cd server && go clean -cache -testcache -modcache
+clean: ## Remove build artifacts + Go caches
+	@rm -rf $(SERVER_DIR)/bin $(SERVER_DIR)/coverage.out $(SERVER_DIR)/coverage.html
+	@rm -rf $(WEB_DIR)/dist
+	@cd $(SERVER_DIR) && go clean -cache -testcache -modcache
 
 # ----------------------------------------
 # GCP Resource Control
