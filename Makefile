@@ -2,7 +2,7 @@
 # DeltaCast — Developer Makefile
 # ========================================
 
-.PHONY: help build run test lint fmt tidy web-dev web-build web-lint web-typecheck web-test docker-up docker-down docker-build clean gcp-open gcp-close gcp-status gcp-livestream-cleanup yt-status yt-open yt-close res-open res-close res-status
+.PHONY: help build run test lint fmt tidy web-install web-dev web-build web-lint web-typecheck web-test web-preview docker-up docker-down docker-build clean gcp-open gcp-close gcp-status gcp-livestream-cleanup yt-status yt-open yt-close res-open res-close res-status
 
 SERVER_DIR := server
 WEB_DIR := web
@@ -49,6 +49,9 @@ tidy:
 # Frontend (React / Vite)
 # ----------------------------------------
 
+web-install: ## Install frontend dependencies (pnpm)
+	@cd $(WEB_DIR) && pnpm install
+
 web-dev: ## Start Vite dev server (localhost:5173)
 	@cd $(WEB_DIR) && pnpm dev
 
@@ -63,6 +66,9 @@ web-typecheck: ## Type check frontend code
 
 web-test: ## Run frontend tests
 	@cd $(WEB_DIR) && pnpm test
+
+web-preview: ## Preview production build locally
+	@cd $(WEB_DIR) && pnpm preview
 
 # ----------------------------------------
 # Docker（僅 backend）
