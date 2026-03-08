@@ -17,8 +17,8 @@ on:
       - '.github/workflows/frontend-web-workflow.yml'
 
 jobs:
-  # Lint Job：無論是 Push 或 Tag 都會執行
-  lint:
+  # CI Job：lint → type-check → test，無論 Push 或 Tag 都執行
+  ci:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -28,15 +28,17 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
           version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+          cache-dependency-path: web/pnpm-lock.yaml
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -44,38 +46,15 @@ jobs:
       - name: Run lint
         run: pnpm lint
 
-  # 型別檢查 Job：無論是 Push 或 Tag 都會執行
-  type-check:
-    needs: [lint]
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./web
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
       - name: Run type check
         run: pnpm type-check
 
+      - name: Run tests
+        run: pnpm test
+
   # 打包與部署 Job：只有在符合 Tag 格式時才執行
   build-and-deploy:
-    # 這裡確保 lint 與 type-check 通過才跑 build
-    needs: [type-check]
+    needs: [ci]
     # 關鍵條件：判斷當前的 ref 是否為 tag
     if: startsWith(github.ref, 'refs/tags/v')
     environment:
@@ -92,15 +71,17 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
           version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+          cache-dependency-path: web/pnpm-lock.yaml
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
