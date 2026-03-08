@@ -22,7 +22,7 @@
     "video.js": "^8.23.7"
   },
   "devDependencies": {
-    "@eslint/js": "^9",
+    "@eslint/js": "^10.0.1",
     "@tailwindcss/vite": "^4",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
@@ -33,7 +33,7 @@
     "@types/video.js": "^7.3.58",
     "@vitejs/plugin-react": "^4",
     "@vitest/coverage-v8": "^4.0.18",
-    "eslint": "^9",
+    "eslint": "^10.0.3",
     "jsdom": "^28.1.0",
     "tailwindcss": "^4",
     "typescript": "^5",
