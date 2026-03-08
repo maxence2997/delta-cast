@@ -18,7 +18,7 @@
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-player": "^3.4.0",
-    "react-router-dom": "^6.30.0",
+    "react-router-dom": "^7.13.1",
     "video.js": "^8.23.7"
   },
   "devDependencies": {
@@ -27,18 +27,18 @@
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
-    "@types/node": "^20",
+    "@types/node": "^25.3.5",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/video.js": "^7.3.58",
-    "@vitejs/plugin-react": "^4",
+    "@vitejs/plugin-react": "^4.7.0",
     "@vitest/coverage-v8": "^4.0.18",
     "eslint": "^10.0.3",
     "jsdom": "^28.1.0",
     "tailwindcss": "^4",
     "typescript": "^5",
     "typescript-eslint": "^8",
-    "vite": "^6",
+    "vite": "^6.4.1",
     "vitest": "^4.0.18",
     "wrangler": "^4.67.0"
   }
