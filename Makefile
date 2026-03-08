@@ -2,7 +2,7 @@
 # DeltaCast — Developer Makefile
 # ========================================
 
-.PHONY: help build run test lint fmt tidy web-install web-dev web-build web-lint web-typecheck web-test web-preview docker-up docker-down docker-build clean gcp-open gcp-close gcp-status gcp-livestream-cleanup yt-status yt-open yt-close res-open res-close res-status
+.PHONY: help build run test lint fmt tidy web-install web-dev web-build web-lint web-type-check web-test web-preview docker-up docker-down docker-build clean gcp-open gcp-close gcp-status gcp-livestream-cleanup yt-status yt-open yt-close res-open res-close res-status
 
 SERVER_DIR := server
 WEB_DIR := web
@@ -61,8 +61,8 @@ web-build: ## Build frontend for production (output: web/dist/)
 web-lint: ## Lint frontend code
 	@cd $(WEB_DIR) && pnpm lint
 
-web-typecheck: ## Type check frontend code
-	@cd $(WEB_DIR) && pnpm typecheck
+web-type-check: ## Type check frontend code
+	@cd $(WEB_DIR) && pnpm type-check
 
 web-test: ## Run frontend tests
 	@cd $(WEB_DIR) && pnpm test
